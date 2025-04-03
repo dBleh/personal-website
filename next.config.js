@@ -1,7 +1,7 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-
-  // Add other config options here if needed
-};
-
-module.exports = nextConfig;
+module.exports = {
+  webpack: (config, { isServer }) => {
+    // Reduce bundle size
+    config.optimization.minimize = true;
+    return config;
+  }
+}
