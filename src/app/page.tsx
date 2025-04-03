@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export default function Home() {
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto" style={{marginLeft: '220px'}}>
       <section className="mb-12">
         <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
           {/* Profile image placeholder */}

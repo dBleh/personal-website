@@ -1,10 +1,31 @@
+'use client';
+
 import React, { Component } from 'react';
+
+// Import Three.js safely for browser-only execution with proper TypeScript support
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
 import { DragControls } from 'three/examples/jsm/controls/DragControls';
 
+// Define interfaces for state and objects
+interface GeoBuildState {
+  mouseX: number | null;
+  mouseY: number | null;
+  isVisible: boolean;
+  showInstructions: boolean;
+}
+
+// Define a union type for valid object types
+type ObjectType = 'floor' | 'wall' | 'roof' | 'door';
+
+interface SceneObject {
+  obj: THREE.Object3D;
+  objType: ObjectType;
+  side?: string;
+}
+
 // Helper functions
-const objIns = (vThree, objType) => {
+const objIns = (vThree: THREE.Vector3, objType: ObjectType): THREE.Object3D | null => {  
   if (!(vThree instanceof THREE.Vector3)) {
     throw new Error('vThree must be an instance of THREE.Vector3');
   }
@@ -107,8 +128,8 @@ const objIns = (vThree, objType) => {
 };
 
 // Add snap points to objects
-const addSnaps = (selectedObject, isVisible) => {
-  const snapObjs = [];
+const addSnaps = (selectedObject: SceneObject, isVisible: boolean): SceneObject[] => {
+  const snapObjs: SceneObject[] = [];
   const objGeometry = new THREE.BoxGeometry(1, 1, 1);
   const matT = new THREE.MeshBasicMaterial({ color: 0xf00fff });
   const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -134,7 +155,9 @@ const addSnaps = (selectedObject, isVisible) => {
     snapObjLeft.position.copy(selectedObject.obj.position).add(snapPositions.left);
     snapObjLeft.quaternion.copy(selectedObject.obj.quaternion);
     snapObjLeft.rotateY(Math.PI / 2);
-    selectedObject.obj.parent.add(snapObjLeft);
+    if (selectedObject.obj.parent) {
+      selectedObject.obj.parent.add(snapObjLeft);
+    }
     snapObjLeft.visible = isVisible;
     snapObjs.push({
       obj: snapObjLeft,
@@ -146,7 +169,9 @@ const addSnaps = (selectedObject, isVisible) => {
     snapObjRight.position.copy(selectedObject.obj.position).add(snapPositions.right);
     snapObjRight.quaternion.copy(selectedObject.obj.quaternion);
     snapObjRight.rotateY(-Math.PI / 2);
-    selectedObject.obj.parent.add(snapObjRight);
+    if (selectedObject.obj.parent) {
+      selectedObject.obj.parent.add(snapObjRight);
+    }
     snapObjRight.visible = isVisible;
     snapObjs.push({
       obj: snapObjRight,
@@ -158,7 +183,9 @@ const addSnaps = (selectedObject, isVisible) => {
     snapObjBack.position.copy(selectedObject.obj.position).add(snapPositions.back);
     snapObjBack.quaternion.copy(selectedObject.obj.quaternion);
     snapObjBack.rotateY(Math.PI);
-    selectedObject.obj.parent.add(snapObjBack);
+    if (selectedObject.obj.parent) {
+      selectedObject.obj.parent.add(snapObjBack);
+    }
     snapObjBack.visible = isVisible;
     snapObjs.push({
       obj: snapObjBack,
@@ -169,7 +196,9 @@ const addSnaps = (selectedObject, isVisible) => {
     const snapObjFront = new THREE.Mesh(objGeometry, matT);
     snapObjFront.position.copy(selectedObject.obj.position).add(snapPositions.front);
     snapObjFront.quaternion.copy(selectedObject.obj.quaternion);
-    selectedObject.obj.parent.add(snapObjFront);
+    if (selectedObject.obj.parent) {
+      selectedObject.obj.parent.add(snapObjFront);
+    }
     snapObjFront.visible = isVisible;
     snapObjs.push({
       obj: snapObjFront,
@@ -187,7 +216,9 @@ const addSnaps = (selectedObject, isVisible) => {
     snapPos.applyQuaternion(selectedObject.obj.quaternion);
     snapObj.position.copy(selectedObject.obj.position).add(snapPos);
     snapObj.quaternion.copy(selectedObject.obj.quaternion);
-    selectedObject.obj.parent.add(snapObj);
+    if (selectedObject.obj.parent) {
+      selectedObject.obj.parent.add(snapObj);
+    }
     snapObj.visible = isVisible;
     snapObjs.push({
       obj: snapObj,
@@ -204,7 +235,9 @@ const addSnaps = (selectedObject, isVisible) => {
     snapPos.applyQuaternion(selectedObject.obj.quaternion);
     snapObj.position.copy(selectedObject.obj.position).add(snapPos);
     snapObj.quaternion.copy(selectedObject.obj.quaternion);
-    selectedObject.obj.parent.add(snapObj);
+    if (selectedObject.obj.parent) {
+      selectedObject.obj.parent.add(snapObj);
+    }
     snapObj.visible = isVisible;
     snapObjs.push({
       obj: snapObj,
@@ -218,7 +251,7 @@ const addSnaps = (selectedObject, isVisible) => {
 };
 
 // Function to check for intersection between objects
-const getIntersectObj = (object, snapRadius) => {
+const getIntersectObj = (object: SceneObject, snapRadius: THREE.Mesh): SceneObject | false => {
   const bounds = new THREE.Box3().setFromObject(object.obj);
   const radiusBounds = new THREE.Box3().setFromObject(snapRadius);
   const intersects = bounds.intersectsBox(radiusBounds);
@@ -231,10 +264,11 @@ const getIntersectObj = (object, snapRadius) => {
 };
 
 // Function to set position of snapped objects
-const setPosition = (objToSnap, selectedObject, snapRadius) => {
+const setPosition = (objToSnap: SceneObject, selectedObject: SceneObject, snapRadius: THREE.Mesh): THREE.Vector3 | false => {
   let offset = 0;
   
-  if (selectedObject.objType === 'wall') {
+  if (selectedObject.objType === 'wall' && selectedObject.obj instanceof THREE.Mesh && 
+      selectedObject.obj.geometry instanceof THREE.BoxGeometry) {
     offset = selectedObject.obj.geometry.parameters.height / 2 + 0.5;
   } else if (selectedObject.objType === 'floor') {
     offset = -2;
@@ -311,13 +345,9 @@ const setPosition = (objToSnap, selectedObject, snapRadius) => {
       direction = snappedDirection.clone().multiplyScalar(-5);
     }
     
-    if (objToSnap.objType === 'roof') {
-      direction.multiplyScalar(1.0419);
-      selectedObject.obj.position.add(direction);
-      selectedObject.obj.position.y -= 0.1;
-    } else {
-      selectedObject.obj.position.add(direction);
-    }
+    // THIS IS THE FIX: Removing the check for objToSnap.objType === 'roof' 
+    // since it's not possible at this point
+    selectedObject.obj.position.add(direction);
   }
   
   if (selectedObject.objType === "door") {
@@ -348,8 +378,43 @@ const setPosition = (objToSnap, selectedObject, snapRadius) => {
   return selectedObject.obj.position;
 };
 
-class GeoBuild extends Component {
-  constructor(props) {
+class GeoBuild extends Component<{}, GeoBuildState> {
+  private selectedObject: SceneObject | null = null;
+  private cubes: THREE.Object3D[] = [];
+  private grid: any[] = [];
+  private isDragging: boolean = false;
+  private snapObjs: SceneObject[] = [];
+  private objs: SceneObject[] = [];
+  private objToSnap: SceneObject | null = null;
+  private objHighlighted: any = null;
+  private origMat: THREE.Material | null = null;
+  private isStarted: boolean = false;
+  private wIsDown: boolean = false;
+  private eIsdown: boolean = false;
+  private sIsDown: boolean = false;
+  private aIsDown: boolean = false;
+  private dIsDown: boolean = false;
+  private spaceIsDown: boolean = false;
+  private lControl: boolean = false;
+  private inBound: boolean = false;
+  private boundMat: THREE.Material | null = null;
+  private time: Date = new Date();
+  private lastTime: Date = new Date();
+  private scene!: THREE.Scene;
+  private camera!: THREE.PerspectiveCamera;
+  private lockControls!: PointerLockControls;
+  private renderer!: THREE.WebGLRenderer;
+  private light!: THREE.PointLight;
+  private geometry!: THREE.BoxGeometry;
+  private material!: THREE.MeshBasicMaterial;
+  private gridHelper!: THREE.GridHelper;
+  private snapRadius!: THREE.Mesh;
+  private dragControls!: DragControls;
+  private mount: HTMLDivElement | null = null;
+  private frameId: number = 0;
+  private initialized: boolean = false;
+
+  constructor(props: {}) {
     super(props);
     
     this.state = {
@@ -368,30 +433,11 @@ class GeoBuild extends Component {
     this.toggleInstructions = this.toggleInstructions.bind(this);
     this.toggleSnapPoints = this.toggleSnapPoints.bind(this);
     this.clearScene = this.clearScene.bind(this);
+    this.initScene = this.initScene.bind(this);
+  }
 
-    // Scene setup
-    this.selectedObject = null;
-    this.cubes = [];
-    this.grid = [];
-    this.isDragging = false;
-    this.snapObjs = [];
-    this.objs = [];
-    this.objToSnap = null;
-    this.objHighlighted = null;
-    this.origMat = null;
-    this.isStarted = false;
-    this.wIsDown = false;
-    this.eIsdown = false;
-    this.sIsDown = false;
-    this.aIsDown = false;
-    this.dIsDown = false;
-    this.spaceIsDown = false;
-    this.lControl = false;
-    this.inBound = false;
-    this.boundMat = null;
-
-    this.time = new Date();
-    this.lastTime = this.time;
+  initScene() {
+    if (this.initialized || typeof window === 'undefined') return;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -429,23 +475,47 @@ class GeoBuild extends Component {
     this.camera.rotation.x = -0.5;
     this.scene.add(this.light);
     this.scene.add(this.gridHelper);
-  }
 
-  componentDidMount() {
     // Set up renderer
     this.renderer.setClearColor(0xFAF9F6);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.mount.appendChild(this.renderer.domElement);
+    if (this.mount) {
+      this.mount.appendChild(this.renderer.domElement);
+    }
 
     // Set up event listeners
     this.dragControls.addEventListener('dragstart', (event) => {
       this.isDragging = true;
-      event.object.material.opacity = 0.33;
+      const obj = event.object as THREE.Mesh;
+      if (obj.material) {
+        // Handle both single material and material array cases
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach(mat => {
+            if ('opacity' in mat) {
+              mat.opacity = 0.33;
+            }
+          });
+        } else if ('opacity' in obj.material) {
+          obj.material.opacity = 0.33;
+        }
+      }
     });
     
     this.dragControls.addEventListener('dragend', (event) => {
       this.isDragging = false;
-      event.object.material.opacity = 1;
+      const obj = event.object as THREE.Mesh;
+      if (obj.material) {
+        // Handle both single material and material array cases
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach(mat => {
+            if ('opacity' in mat) {
+              mat.opacity = 1;
+            }
+          });
+        } else if ('opacity' in obj.material) {
+          obj.material.opacity = 1;
+        }
+      }
     });
     
     document.addEventListener('keydown', this.handleKeyDown);
@@ -459,21 +529,39 @@ class GeoBuild extends Component {
 
     // Start animation
     this.animate();
+    this.initialized = true;
+  }
+
+  componentDidMount() {
+    // Necessary for both direct page load and client navigation
+    this.initScene();
+  }
+
+  componentDidUpdate() {
+    // Ensure initialization happens after client navigation
+    if (!this.initialized) {
+      this.initScene();
+    }
   }
 
   componentWillUnmount() {
-    cancelAnimationFrame(this.frameId);
+    if (this.frameId) {
+      cancelAnimationFrame(this.frameId);
+    }
+    
     document.removeEventListener('keydown', this.handleKeyDown);
     document.removeEventListener('mousedown', this.handleMouseDown);
     document.removeEventListener('mousemove', this.handleMouseMove);
     document.removeEventListener('keyup', this.handleKeyUp);
     
-    if (this.mount && this.renderer.domElement) {
+    if (this.mount && this.renderer?.domElement) {
       this.mount.removeChild(this.renderer.domElement);
     }
+    
+    this.initialized = false;
   }
 
-  handleMouseMove(event) {
+  handleMouseMove(event: MouseEvent) {
     if (this.selectedObject) {
       const deltaY = event.movementX * 0.002;
       this.selectedObject.obj.rotation.y -= deltaY;
@@ -500,13 +588,13 @@ class GeoBuild extends Component {
       raycaster.setFromCamera(mouse, this.camera);
       
       // Collect all objects and their children for intersection test
-      const objsToTest = [];
+      const objsToTest: THREE.Object3D[] = [];
       this.objs.forEach(obj => {
         objsToTest.push(obj.obj);
         // Add children for testing too
         if (obj.obj.children && obj.obj.children.length > 0) {
           obj.obj.children.forEach(child => {
-            if (child.isMesh) {
+            if ((child as THREE.Mesh).isMesh) {
               objsToTest.push(child);
             }
           });
@@ -523,17 +611,26 @@ class GeoBuild extends Component {
       if (intersects.length > 0) {
         // If another object was previously highlighted, reset its material
         if (this.objHighlighted !== null) {
-          this.objHighlighted.object.material = this.origMat;
+          const obj = this.objHighlighted.object as THREE.Mesh;
+          if (obj.material && this.origMat) {
+            obj.material = this.origMat;
+          }
         }
         
         // Set the material of the intersected object to the basic material
         this.objHighlighted = intersects[0];
-        this.origMat = intersects[0].object.material;
-        intersects[0].object.material = basicMaterial;
+        const obj = this.objHighlighted.object as THREE.Mesh;
+        if (obj.material) {
+          this.origMat = obj.material as THREE.Material;
+          obj.material = basicMaterial;
+        }
       } else {
         // If there are no intersections, reset previously highlighted object
         if (this.objHighlighted !== null) {
-          this.objHighlighted.object.material = this.origMat;
+          const obj = this.objHighlighted.object as THREE.Mesh;
+          if (obj.material && this.origMat) {
+            obj.material = this.origMat;
+          }
           this.objHighlighted = null;
           this.origMat = null;
         }
@@ -546,7 +643,9 @@ class GeoBuild extends Component {
     if (!this.selectedObject) return;
     
     // Remove the object from the scene
-    this.scene.remove(this.selectedObject.obj.parent);
+    if (this.selectedObject.obj.parent) {
+      this.scene.remove(this.selectedObject.obj.parent);
+    }
     
     // Also remove any associated snap points
     for (let b = 0; b < this.snapObjs.length; b++) {
@@ -599,7 +698,7 @@ class GeoBuild extends Component {
     }
   }
 
-  handleKeyDown(event) {
+  handleKeyDown(event: KeyboardEvent) {
     if (event.keyCode === 69) { // E key
       this.eIsdown = true;
       const popup = document.getElementById("geo-popup");
@@ -614,7 +713,7 @@ class GeoBuild extends Component {
     if (event.keyCode === 82) { // R key
       if (this.objHighlighted) {
         // Find the object in our objs array
-        let objToRemove = null;
+        let objToRemove: SceneObject | null = null;
         let objIndex = -1;
         
         for (let i = 0; i < this.objs.length; i++) {
@@ -631,7 +730,7 @@ class GeoBuild extends Component {
           }
         }
         
-        if (objToRemove) {
+        if (objToRemove && objToRemove.obj.parent) {
           // Remove the object and its parent
           this.scene.remove(objToRemove.obj.parent);
           
@@ -676,7 +775,7 @@ class GeoBuild extends Component {
     }
   }
 
-  handleKeyUp(event) {
+  handleKeyUp(event: KeyboardEvent) {
     if (event.keyCode === 69) { // E key
       const popup = document.getElementById("geo-popup");
       if (popup) popup.style.display = "none";
@@ -708,9 +807,15 @@ class GeoBuild extends Component {
       this.lControl = false;
     }
   }
+
   animate() {
+    if (!this.initialized) {
+      this.frameId = window.requestAnimationFrame(this.animate);
+      return;
+    }
+    
     this.time = new Date();
-    const deltaTime = this.time - this.lastTime;
+    const deltaTime = this.time.getTime() - this.lastTime.getTime();
     this.lastTime = this.time;
 
     if (this.selectedObject) {
@@ -795,30 +900,33 @@ class GeoBuild extends Component {
           this.selectedObject.objType === 'roof') {
         if (this.boundMat === null) {
           // Store the original material
-          if (this.selectedObject.obj.material) {
-            this.boundMat = this.selectedObject.obj.material.clone();
+          const mesh = this.selectedObject.obj as THREE.Mesh;
+          if (mesh.material) {
+            this.boundMat = (mesh.material as THREE.Material).clone();
           }
         }
       }
       
       // Check if object is in valid position
+      const mesh = this.selectedObject.obj as THREE.Mesh;
+      
       if ((this.selectedObject.objType === 'floor') && 
           (this.selectedObject.obj.position.y < -5 || this.selectedObject.obj.position.y > 5)) {
-        this.selectedObject.obj.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        mesh.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
         this.inBound = false;
       } else if (this.selectedObject.objType === 'roof' && !this.objToSnap) {
         // Roof can only be placed on walls or doors
-        this.selectedObject.obj.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        mesh.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
         this.inBound = false;
       } else if ((this.selectedObject.objType === 'wall' || this.selectedObject.objType === 'door') && 
         !this.objToSnap) {
-        this.selectedObject.obj.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        mesh.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
         this.inBound = false;
       } else {
         this.inBound = true;
         if (this.boundMat) {
           // Restore original material
-          this.selectedObject.obj.material = this.boundMat;
+          mesh.material = this.boundMat;
           this.boundMat = null;
         }
       }
@@ -864,10 +972,12 @@ class GeoBuild extends Component {
   }
 
   renderScene() {
-    this.renderer.render(this.scene, this.camera);
+    if (this.renderer && this.scene && this.camera) {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
-  addObj(objType) {
+  addObj(objType: ObjectType) {
     const vThree = new THREE.Vector3(
       this.camera.position.x, 
       this.camera.position.y, 
@@ -883,6 +993,7 @@ class GeoBuild extends Component {
     }
 
     const obj = objIns(vThree, objType);
+    if (!obj) return;
     
     // Set the selectedObject based on objType
     // For door objects, we need special handling
@@ -910,14 +1021,14 @@ class GeoBuild extends Component {
     // Remove all objects
     for (let i = this.objs.length - 1; i >= 0; i--) {
       if (this.objs[i].obj.parent) {
-        this.scene.remove(this.objs[i].obj.parent);
+        this.scene.remove(this.objs[i].obj.parent!);
       }
     }
     
     // Remove all snap points
     for (let i = this.snapObjs.length - 1; i >= 0; i--) {
       if (this.snapObjs[i].obj.parent) {
-        this.scene.remove(this.snapObjs[i].obj.parent);
+        this.scene.remove(this.snapObjs[i].obj.parent!);
       }
     }
     
@@ -950,7 +1061,8 @@ class GeoBuild extends Component {
 
   render() {
     return (
-      <div style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', width: '90%', height: '100vh', overflow: 'hidden', marginLeft: '200px', marginTop:'-10px' }}>
+        
         <div
           ref={(mount) => {
             this.mount = mount;

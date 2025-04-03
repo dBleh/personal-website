@@ -14,18 +14,7 @@ export default function Info() {
         Professional Information
       </h1>
       
-      <section style={{ marginBottom: '2.5rem' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1f2937' }}>About Me</h2>
-        <p style={{ fontSize: '1.125rem', color: '#111827', lineHeight: '1.7', marginBottom: '1rem' }}>
-          I'm Duncan Blais, a Full Stack Developer with expertise in web application development, desktop software, and game development.
-          I specialize in creating efficient technical solutions that solve real-world problems, combining strong programming skills with
-          practical business understanding.
-        </p>
-        <p style={{ fontSize: '1.125rem', color: '#111827', lineHeight: '1.7' }}>
-          With a Computer Science diploma from Douglas College and professional experience at Vancouver Lighting,
-          I've developed a diverse skill set that allows me to tackle complex challenges across different platforms and technologies.
-        </p>
-      </section>
+    
       
       <section style={{ marginBottom: '2.5rem' }}>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1f2937' }}>Education</h2>
@@ -49,7 +38,7 @@ export default function Info() {
           </div>
           <p style={{ marginTop: '1rem', color: '#111827' }}>
             Completed a comprehensive program covering software development, algorithms, data structures, 
-            database design, and web technologies.
+            database design.
           </p>
         </div>
       </section>

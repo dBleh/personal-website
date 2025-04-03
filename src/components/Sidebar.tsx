@@ -3,15 +3,16 @@ import Link from 'next/link';
 export default function Sidebar() {
   return (
     <div style={{
-      width: '16rem',
-      backgroundColor: '#1f2937', // bg-gray-800
+      width: '10rem',
+      height: '100vh', // Full viewport height
+      backgroundColor: '#1f2937',
       color: 'white',
       padding: '1.5rem',
-      flexShrink: 0,
-      position: 'sticky',
+      position: 'fixed', // Fixed position so it stays in place when scrolling
       top: 0,
       left: 0,
-     
+      bottom: 0, // Ensure it extends all the way to the bottom
+      overflowY: 'auto', // Enable vertical scrolling for the sidebar content
       display: 'flex',
       flexDirection: 'column'
     }}>
@@ -29,12 +30,8 @@ export default function Sidebar() {
           Home
         </Link>
       </div>
-      
-      <nav style={{ 
-        flex: 1, 
-        overflowY: 'auto',  // Allow scrolling of nav items if they overflow
-        paddingRight: '0.5rem'  // Add some padding for scrollbar
-      }}>
+
+      <nav style={{ flex: 1 }}>
         <ul style={{ 
           listStyle: 'none', 
           padding: 0, 
@@ -50,7 +47,8 @@ export default function Sidebar() {
               textDecoration: 'none',
               padding: '0.5rem 0.75rem',
               borderRadius: '0.25rem',
-              transition: 'background-color 0.2s ease'
+              transition: 'background-color 0.2s ease',
+         
             }}>
               Info
             </Link>
@@ -62,7 +60,8 @@ export default function Sidebar() {
               textDecoration: 'none',
               padding: '0.5rem 0.75rem',
               borderRadius: '0.25rem',
-              transition: 'background-color 0.2s ease'
+              transition: 'background-color 0.2s ease',
+            
             }}>
               Projects
             </Link>
@@ -74,14 +73,25 @@ export default function Sidebar() {
               textDecoration: 'none',
               padding: '0.5rem 0.75rem',
               borderRadius: '0.25rem',
-              transition: 'background-color 0.2s ease'
+              transition: 'background-color 0.2s ease',
+          
             }}>
               GeoBuild
             </Link>
           </li>
         </ul>
+        <div style={{ 
+        marginTop: 'auto', 
+        fontSize: '0.875rem', 
+        color: 'rgba(255, 255, 255, 0.6)',
+        paddingTop: '40rem' 
+      }}>
+        &copy; {new Date().getFullYear()} Duncan Blais
+      </div>
       </nav>
+
      
     </div>
   );
 }
+

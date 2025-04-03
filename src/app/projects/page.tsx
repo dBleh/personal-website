@@ -1,9 +1,9 @@
-import ProjectCard from "@/components/ProjectCard";
+import ProjectCard from "../../components/ProjectCard";
 import Link from 'next/link';
 
 export default function Projects() {
   return (
-    <div style={{ maxWidth: '4xl', margin: '0 auto' }}>
+    <div style={{ maxWidth: '4xl', margin: '0 auto', marginLeft: '210px' }}>
       <h1 style={{ 
         fontSize: '2.25rem', 
         fontWeight: 'bold', 
