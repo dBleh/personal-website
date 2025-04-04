@@ -1,17 +1,24 @@
+// Add this line at the very top if it's not already there
+'use client';
+
 import React, { CSSProperties } from 'react';
+import useMediaQuery from '../../hooks/useMediaQuery'; // Adjust path if needed
 
 export default function Info() {
 
+  // --- Instantiate the hook ---
+  const isMobile = useMediaQuery('(max-width: 768px)'); // Use the same breakpoint
+
   // Style for the navigation bar container
   const navBarStyle: CSSProperties = {
-    position: 'fixed', // Keep it in place during scroll
-    top: '40%',      // Adjust vertical position as needed
-    right: '2rem',     // Position on the right side
-    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Slightly transparent white background
+    position: 'fixed',
+    top: '40%',
+    right: '2rem',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     padding: '1rem 1.5rem',
     borderRadius: '8px',
-    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)', // Subtle shadow for depth
-    zIndex: 1000, // Ensure it stays on top of other content
+    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+    zIndex: 999, // Below main nav if necessary
   };
 
   // Style for the navigation list
@@ -19,71 +26,79 @@ export default function Info() {
     listStyle: 'none',
     padding: 0,
     margin: 0,
-    textAlign: 'left', // Align text to the right within the nav bar
-    
+    textAlign: 'left',
   };
 
-  // Style for each navigation item (base style)
+  // Style for each navigation item
   const navItemStyle: CSSProperties = {
-    marginBottom: '1rem', // Default space between links
+    marginBottom: '1rem',
   };
 
   // Style for the navigation links
   const navLinkStyle: CSSProperties = {
     textDecoration: 'none',
-    color: '#2563eb', // Use a consistent theme color
+    color: '#2563eb',
     fontWeight: 'bold',
     fontSize: '0.9rem',
-    transition: 'color 0.2s ease-in-out', // Smooth color change on hover
-    
+    transition: 'color 0.2s ease-in-out',
   };
 
-  // Define the navigation links as data for cleaner rendering
+  // Define the navigation links
   const navLinksData = [
     { href: '#education-section', text: 'Education' },
     { href: '#experience-section', text: 'Experience' },
     { href: '#contact-section', text: 'Contact Info' },
   ];
 
+  // --- Scroll Offset Style (Adjust based on your main nav height) ---
+  const scrollOffsetStyle: CSSProperties = {
+     paddingTop: '5rem', // Pushes content down below fixed main nav
+     marginTop: '-5rem' // Pulls the section back up for scroll targeting
+  };
+
+
   return (
-    <> {/* Use Fragment to wrap elements without adding extra DOM node */}
-      {/* Inject CSS for smooth scrolling and link hover effect */}
+    <>
+      {/* Inject CSS for smooth scrolling */}
       <style>{`
         html {
           scroll-behavior: smooth;
         }
-        /* Basic hover effect for nav links */
-        .nav-link:hover {
-            color: #1d4ed8; /* Darker blue on hover */
+        /* Rename class slightly to be specific to this page if needed */
+        .info-nav-link:hover {
+            color: #1d4ed8;
         }
       `}</style>
 
-      {/* Navigation Bar - Using map for cleaner code */}
-      <nav style={navBarStyle}>
-        <ul style={navListStyle}>
-          {navLinksData.map((link, index) => {
-            // Apply default style, but remove bottom margin if it's the last item
-            const currentItemStyle = {
-              ...navItemStyle,
-              ...(index === navLinksData.length - 1 && { marginBottom: 0 }), // Remove margin for the last item
-            };
+      {/* --- Conditionally Rendered In-Page Navigation Bar --- */}
+      {/* Only render this nav if NOT mobile */}
+      {!isMobile && (
+        <nav style={navBarStyle}>
+          <ul style={navListStyle}>
+            {navLinksData.map((link, index) => {
+              const currentItemStyle = {
+                ...navItemStyle,
+                ...(index === navLinksData.length - 1 && { marginBottom: 0 }),
+              };
 
-            return (
-              <li key={link.href} style={currentItemStyle}> {/* Use href as a unique key */}
-                <a href={link.href} style={navLinkStyle} className="nav-link">
-                  {link.text}
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+              return (
+                <li key={link.href} style={currentItemStyle}>
+                  <a href={link.href} style={navLinkStyle} className="info-nav-link">
+                    {link.text}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )} {/* End of conditional rendering block */}
+
 
       {/* Consistent Page Container */}
       <div style={{ maxWidth: '48rem', margin: '0 auto', padding: '2rem 1rem' }}>
         {/* Page Title */}
         <h1 style={{
-          fontSize: '2rem', // Consistent with Projects page
+          fontSize: '2rem',
           fontWeight: 'bold',
           marginBottom: '2rem',
           color: '#1f2937',
@@ -93,8 +108,8 @@ export default function Info() {
           Professional Information
         </h1>
 
-        {/* Education Section - Added id and scroll offset */}
-        <section id="education-section" style={{ marginBottom: '2.5rem', paddingTop: '2rem', marginTop: '-2rem' }}> {/* Offset for fixed nav */}
+        {/* Education Section - Apply scroll offset style */}
+        <section id="education-section" style={{ marginBottom: '2.5rem', ...scrollOffsetStyle }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1f2937' }}>Education</h2>
           <div style={{
             backgroundColor: 'white',
@@ -103,7 +118,8 @@ export default function Info() {
             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
             border: '1px solid #e5e7eb'
           }}>
-            <div style={{
+            {/* ... content ... */}
+             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'flex-start',
@@ -122,8 +138,8 @@ export default function Info() {
           </div>
         </section>
 
-        {/* Professional Experience Section - Added id and scroll offset */}
-        <section id="experience-section" style={{ marginBottom: '2.5rem', paddingTop: '2rem', marginTop: '-2rem' }}> {/* Offset for fixed nav */}
+        {/* Professional Experience Section - Apply scroll offset style */}
+        <section id="experience-section" style={{ marginBottom: '2.5rem', ...scrollOffsetStyle }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1f2937' }}>Professional Experience</h2>
 
           {/* Experience Card 1 */}
@@ -135,6 +151,7 @@ export default function Info() {
               border: '1px solid #e5e7eb',
               marginBottom: '1.5rem'
           }}>
+            {/* ... content ... */}
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -165,7 +182,8 @@ export default function Info() {
               border: '1px solid #e5e7eb',
               marginBottom: '1.5rem'
           }}>
-             <div style={{
+            {/* ... content ... */}
+            <div style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'flex-start',
@@ -193,8 +211,8 @@ export default function Info() {
               borderRadius: '0.5rem',
               boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
               border: '1px solid #e5e7eb'
-              // No marginBottom needed on the last card in this section
           }}>
+            {/* ... content ... */}
              <div style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -217,8 +235,8 @@ export default function Info() {
           </div>
         </section>
 
-        {/* Contact Information Section - Added id and scroll offset */}
-        <section id="contact-section" style={{ paddingTop: '2rem', marginTop: '-2rem' }}> {/* Offset for fixed nav */}
+        {/* Contact Information Section - Apply scroll offset style */}
+        <section id="contact-section" style={{ ...scrollOffsetStyle }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1f2937' }}>Contact Information</h2>
           <div style={{
             backgroundColor: 'white',
@@ -227,11 +245,11 @@ export default function Info() {
             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
             border: '1px solid #e5e7eb'
           }}>
-            {/* Use flexbox for better alignment and wrapping */}
+            {/* ... content ... */}
             <div style={{
               display: 'flex',
               flexWrap: 'wrap',
-              gap: '1.5rem', // Spacing between contact items
+              gap: '1.5rem',
               alignItems: 'center'
             }}>
               {/* Email */}
@@ -250,8 +268,7 @@ export default function Info() {
               </div>
                {/* GitHub */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                {/* Using the GitHub SVG from Home for consistency */}
-                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#2563eb" style={{ flexShrink: 0 }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#2563eb" style={{ flexShrink: 0 }}>
                     <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                   </svg>
                 <a href="https://github.com/dBleh" target="_blank" rel="noopener noreferrer" style={{ color: '#111827', textDecoration: 'none', wordBreak: 'break-all' }}>github.com/dBleh</a>

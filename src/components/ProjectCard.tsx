@@ -26,7 +26,8 @@ export default function ProjectCard({
       borderRadius: '0.5rem',
       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
       overflow: 'hidden',
-      backgroundColor: 'white'
+      backgroundColor: 'white',
+      marginBottom: '1rem',
     }}>
       {imageUrl && (
         <div style={{ position: 'relative', height: '12rem', width: '100%' }}>

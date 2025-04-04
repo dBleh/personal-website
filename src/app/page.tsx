@@ -1,34 +1,39 @@
-import React, { CSSProperties } from 'react'; // Import CSSProperties
+'use client';
+import React, { CSSProperties } from 'react';
 import Link from 'next/link';
+import useMediaQuery from '../hooks/useMediaQuery'; // Adjust path if needed
 
 export default function Home() {
 
+  // --- Instantiate the hook ---
+  const isMobile = useMediaQuery('(max-width: 768px)'); // Use the same breakpoint
+
   // --- Copied Styles from Info.tsx ---
   const navBarStyle: CSSProperties = {
-    position: 'fixed', // Keep it in place during scroll
-    top: '40%',      // Adjust vertical position as needed
-    right: '2rem',     // Position on the right side
-    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Slightly transparent white background
+    position: 'fixed',
+    top: '40%',
+    right: '2rem',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     padding: '1rem 1.5rem',
     borderRadius: '8px',
-    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)', // Subtle shadow for depth
-    zIndex: 999, // Ensure it stays on top, but below main nav if necessary
+    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+    zIndex: 999,
   };
 
   const navListStyle: CSSProperties = {
     listStyle: 'none',
     padding: 0,
     margin: 0,
-    textAlign: 'left', // Align text within the nav bar
+    textAlign: 'left',
   };
 
   const navItemStyle: CSSProperties = {
-    marginBottom: '1rem', // Default space between links
+    marginBottom: '1rem',
   };
 
   const navLinkStyle: CSSProperties = {
     textDecoration: 'none',
-    color: '#2563eb', // Use a consistent theme color
+    color: '#2563eb',
     fontWeight: 'bold',
     fontSize: '0.9rem',
     transition: 'color 0.2s ease-in-out',
@@ -39,64 +44,64 @@ export default function Home() {
     { href: '#about-me-section', text: 'About Me' },
     { href: '#skills-section', text: 'Skills' },
     { href: '#projects-section', text: 'Projects' },
-    // Add more links if you have more sections you want to navigate to
   ];
 
-  // --- Scroll Offset Style (Adjust based on your main nav height) ---
-  // Use a value slightly larger than the mobile top bar height (4rem)
+  // --- Scroll Offset Style ---
+  // This offset is still useful to account for the main fixed nav (top bar on mobile)
   const scrollOffsetStyle: CSSProperties = {
-     paddingTop: '5rem', // Pushes content down
-     marginTop: '-5rem' // Pulls the section back up to align the scroll target
+     paddingTop: '5rem',
+     marginTop: '-5rem'
   };
 
   return (
-    <> {/* Use Fragment */}
+    <>
       {/* --- Copied Smooth Scrolling Style --- */}
       <style>{`
         html {
           scroll-behavior: smooth;
         }
-        /* Basic hover effect for nav links */
         .page-nav-link:hover {
-            color: #1d4ed8; /* Darker blue on hover */
+            color: #1d4ed8;
         }
       `}</style>
 
-      {/* --- Copied In-Page Navigation Bar --- */}
-      <nav style={navBarStyle}>
-        <ul style={navListStyle}>
-          {navLinksData.map((link, index) => {
-            const currentItemStyle = {
-              ...navItemStyle,
-              ...(index === navLinksData.length - 1 && { marginBottom: 0 }), // Remove margin for last item
-            };
+      {/* --- Conditionally Rendered In-Page Navigation Bar --- */}
+      {/* Only render this nav if NOT mobile */}
+      {!isMobile && (
+        <nav style={navBarStyle}>
+          <ul style={navListStyle}>
+            {navLinksData.map((link, index) => {
+              const currentItemStyle = {
+                ...navItemStyle,
+                ...(index === navLinksData.length - 1 && { marginBottom: 0 }),
+              };
 
-            return (
-              <li key={link.href} style={currentItemStyle}>
-                {/* Use a unique class name to avoid potential global conflicts */}
-                <a href={link.href} style={navLinkStyle} className="page-nav-link">
-                  {link.text}
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+              return (
+                <li key={link.href} style={currentItemStyle}>
+                  <a href={link.href} style={navLinkStyle} className="page-nav-link">
+                    {link.text}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )} {/* End of conditional rendering block */}
 
 
       {/* --- Original Home Content --- */}
-      {/* Consistent Page Container */}
       <div style={{ maxWidth: '48rem', margin: '0 auto', padding: '2rem 1rem' }}>
-        {/* Hero Section - Does not need an ID unless you want to link to it */}
-        <section style={{ marginBottom: '1rem' }}> {/* Adjusted margin */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        {/* Hero Section */}
+        <section style={{ marginBottom: '2rem' }}>
+          {/* ... content ... */}
+           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             {/* Info Column */}
             <div>
               <h1 style={{ fontSize: '2.5rem', lineHeight: 1.2, fontWeight: 'bold', marginBottom: '0.75rem', color: '#1f2937' }}>Duncan Blais</h1>
               <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#2563eb', fontWeight: 600 }}>Full Stack Developer</h2>
 
               {/* Contact Links */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
                 {/* Email */}
                 <a
                   href="mailto:Duncanblais@gmail.com"
@@ -135,9 +140,10 @@ export default function Home() {
           </div>
         </section>
 
-        {/* About Me Section - Added ID and scroll offset style */}
-        <section id="about-me-section" style={{ marginBottom: 'rem', ...scrollOffsetStyle }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1f2937', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>About Me</h2>
+        {/* About Me Section */}
+        <section id="about-me-section" style={{ marginBottom: '3rem', ...scrollOffsetStyle }}>
+          {/* ... content ... */}
+           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1f2937', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>About Me</h2>
           <p style={{ fontSize: '1.125rem', color: '#4b5563', lineHeight: '1.625' }}>
             I'm a Full Stack Developer with experience in building web applications, desktop software, and game development.
             My passion lies in creating efficient solutions that solve real-world problems, whether it's developing interactive maps
@@ -146,8 +152,9 @@ export default function Home() {
           </p>
         </section>
 
-        {/* Technical Skills Section - Added ID and scroll offset style */}
+        {/* Technical Skills Section */}
         <section id="skills-section" style={{ marginBottom: '3rem', ...scrollOffsetStyle }}>
+          {/* ... content ... */}
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#1f2937', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>Technical Skills</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
             {/* Skills Categories */}
@@ -178,8 +185,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Featured Projects Section - Added ID and scroll offset style */}
+        {/* Featured Projects Section */}
         <section id="projects-section" style={{ ...scrollOffsetStyle }}>
+          {/* ... content ... */}
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#1f2937', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>Featured Projects</h2>
           {/* Use a grid for project cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>

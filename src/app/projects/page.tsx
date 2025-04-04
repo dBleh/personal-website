@@ -12,7 +12,7 @@ export default function Projects() {
         marginBottom: '2rem',
         color: '#1f2937',
         borderBottom: '2px solid #3b82f6',
-        paddingBottom: '0.5rem'
+        paddingBottom: '1rem'
       }}>
         My Projects
       </h1>
