@@ -1,7 +1,8 @@
+// next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack: (config, { isServer }) => {
-    // Optimize bundle size by implementing chunking strategy
+    // --- Your Custom Webpack Config (Keeping as is) ---
     config.optimization.splitChunks = {
       chunks: 'all',
       maxInitialRequests: 25,
@@ -29,7 +30,6 @@ const nextConfig = {
       }
     };
 
-    // Only include minimal set of three.js modules
     if (!isServer) {
       // Add bundle analyzer in development when needed
       if (process.env.ANALYZE === 'true') {
@@ -43,17 +43,28 @@ const nextConfig = {
         );
       }
     }
+    // --- End of Your Custom Webpack Config ---
 
     return config;
   },
-  // Set output compression level
-  compress: true,
-  poweredByHeader: false,
-  reactStrictMode: true,
-  // Optimize output for static site
-  output: 'standalone',
-  // Add support for TypeScript path aliases if you use them
-  swcMinify: true,
+
+  // --- Standard Next.js Config Options ---
+  compress: true, // Keep compression enabled
+  poweredByHeader: false, // Keep poweredByHeader disabled
+  reactStrictMode: true, // Keep Strict Mode enabled
+  swcMinify: true, // Keep SWC minification enabled
+
+  // --- Static Export Configuration ---
+  // ** CHANGE: Use 'export' instead of 'standalone' for true static site generation **
+  // This creates an 'out' folder suitable for static hosting like Cloudflare Pages.
+  output: 'export',
+
+  // ** ADD: Required for static export if using next/image **
+  // Tells Next.js not to try and use its image optimization server,
+  // as it won't be running on Cloudflare Pages by default.
+  images: {
+    unoptimized: true,
+  },
 };
 
 module.exports = nextConfig;
