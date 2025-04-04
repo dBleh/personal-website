@@ -1044,7 +1044,7 @@ class GeoBuild extends Component<{}, GeoBuildState> {
 
   render() {
     return (
-      <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', marginLeft: '0px', marginTop:'0px' }}>
+      <div style={{ position: 'fixed', width: '100%', height: '100%', overflow: 'hidden', marginLeft: '0px', marginTop:'0px' }}>
         
         <div
           ref={(mount) => {
@@ -1059,7 +1059,7 @@ class GeoBuild extends Component<{}, GeoBuildState> {
           right: '10px',
           backgroundColor: 'rgba(255, 255, 255, 0.8)',
           padding: '10px',
-          borderRadius: '5px',
+          borderRadius: '0px',
           zIndex: 100
         }}>
           <div 
