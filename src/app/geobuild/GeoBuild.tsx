@@ -2,12 +2,10 @@
 
 import React, { Component } from 'react';
 
-// Import Three.js safely for browser-only execution with proper TypeScript support
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
 import { DragControls } from 'three/examples/jsm/controls/DragControls';
 
-// Define interfaces for state and objects
 interface GeoBuildState {
   mouseX: number | null;
   mouseY: number | null;
@@ -15,7 +13,6 @@ interface GeoBuildState {
   showInstructions: boolean;
 }
 
-// Define a union type for valid object types
 type ObjectType = 'floor' | 'wall' | 'roof' | 'door';
 
 interface SceneObject {
@@ -24,7 +21,6 @@ interface SceneObject {
   side?: string;
 }
 
-// Helper functions
 const objIns = (vThree: THREE.Vector3, objType: ObjectType): THREE.Object3D | null => {  
   if (!(vThree instanceof THREE.Vector3)) {
     throw new Error('vThree must be an instance of THREE.Vector3');
@@ -68,9 +64,6 @@ const objIns = (vThree: THREE.Vector3, objType: ObjectType): THREE.Object3D | nu
   }
   
   if (objType === 'door') {
-    // --- MODIFICATION START ---
-
-    // 1. Define the shape with the hole (like original)
     const wallShape = new THREE.Shape();
     wallShape.moveTo(-5, -5);
     wallShape.lineTo(-5, 5);
@@ -86,33 +79,23 @@ const objIns = (vThree: THREE.Vector3, objType: ObjectType): THREE.Object3D | nu
     doorHole.lineTo(-2.5, -5);
     wallShape.holes.push(doorHole); // Add the hole to the wall shape
 
-    // 2. Extrude the shape (like original)
     const extrudeSettings = { depth: 0.2, bevelEnabled: false };
     const doorFrameGeometry = new THREE.ExtrudeGeometry(wallShape, extrudeSettings);
 
-    // 3. Create the SOLID material for the frame
     const solidMaterial = new THREE.MeshBasicMaterial({ color: 0xCC313D });
 
-    // 4. Create the WIREFRAME material (like other objects)
     const wireframeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
 
-    // 5. Create the SOLID mesh using the frame geometry
     const solidMesh = new THREE.Mesh(doorFrameGeometry, solidMaterial);
 
-    // 6. Create the WIREFRAME mesh using the SAME frame geometry
     const wireframeMesh = new THREE.Mesh(doorFrameGeometry, wireframeMaterial);
 
-    // 7. Add the wireframe mesh AS A CHILD of the solid mesh (like other objects)
     solidMesh.add(wireframeMesh);
 
-    // 8. Set the position of the combined object (solid + wireframe child)
     solidMesh.position.set(vThree.x, vThree.y, vThree.z);
 
-    // 9. Add the main solid mesh (which contains the wireframe) to the parent Object3D
     pObj.add(solidMesh);
 
-    // 10. Keep the dummy box geometry for consistent snapping/interaction logic
-    // (This seemed necessary in your original code, likely for reliable bounding box checks)
     const dummyGeometry = new THREE.BoxGeometry(10, 10, 0.2); // Same size as wall
     const dummyMaterial = new THREE.MeshBasicMaterial({
       // color: 0xCC313D, // Color doesn't matter if invisible
@@ -123,11 +106,8 @@ const objIns = (vThree: THREE.Vector3, objType: ObjectType): THREE.Object3D | nu
     const dummyMesh = new THREE.Mesh(dummyGeometry, dummyMaterial);
     dummyMesh.position.copy(solidMesh.position); // Match position
     dummyMesh.visible = false; // Make it invisible
-    // Store reference on the VISIBLE mesh's userData if needed elsewhere
     solidMesh.userData.dummyMesh = dummyMesh;
     pObj.add(dummyMesh); // Add the dummy mesh to the parent Object3D as well
-
-    // --- MODIFICATION END ---
     return pObj;
   }
 
@@ -360,14 +340,10 @@ const setPosition = (objToSnap: SceneObject, selectedObject: SceneObject, snapRa
     } else {
       direction = snappedDirection.clone().multiplyScalar(-5);
     }
-    
-    // THIS IS THE FIX: Removing the check for objToSnap.objType === 'roof' 
-    // since it's not possible at this point
     selectedObject.obj.position.add(direction);
   }
   
   if (selectedObject.objType === "door") {
-    // Apply the same behavior as walls for doors
     const q = new THREE.Quaternion();
     q.setFromUnitVectors(new THREE.Vector3(0, 0, -1), snappedDirection);
     selectedObject.obj.quaternion.copy(q);
@@ -383,8 +359,6 @@ const setPosition = (objToSnap: SceneObject, selectedObject: SceneObject, snapRa
     if (objToSnap.objType === "wall") {
       selectedObject.obj.position.y -= 0.5;
     }
-    
-    // If the door has a dummy mesh, update its position and rotation too
     if (selectedObject.obj.userData && selectedObject.obj.userData.dummyMesh) {
       selectedObject.obj.userData.dummyMesh.position.copy(selectedObject.obj.position);
       selectedObject.obj.userData.dummyMesh.quaternion.copy(selectedObject.obj.quaternion);
@@ -583,7 +557,6 @@ class GeoBuild extends Component<{}, GeoBuildState> {
       this.selectedObject.obj.rotation.y -= deltaY;
       this.selectedObject.obj.rotation.z = 0;
       
-      // If it's a door, update the dummy mesh rotation too
       if (this.selectedObject.objType === 'door' && 
           this.selectedObject.obj.userData && 
           this.selectedObject.obj.userData.dummyMesh) {
@@ -607,7 +580,6 @@ class GeoBuild extends Component<{}, GeoBuildState> {
       const objsToTest: THREE.Object3D[] = [];
       this.objs.forEach(obj => {
         objsToTest.push(obj.obj);
-        // Add children for testing too
         if (obj.obj.children && obj.obj.children.length > 0) {
           obj.obj.children.forEach(child => {
             if ((child as THREE.Mesh).isMesh) {
@@ -663,7 +635,7 @@ class GeoBuild extends Component<{}, GeoBuildState> {
       this.scene.remove(this.selectedObject.obj.parent);
     }
     
-    // Also remove any associated snap points
+    // Remove any associated snap points
     for (let b = 0; b < this.snapObjs.length; b++) {
       if (this.snapObjs[b].obj.parent === this.selectedObject.obj.parent) {
         this.scene.remove(this.snapObjs[b].obj);
@@ -897,7 +869,6 @@ class GeoBuild extends Component<{}, GeoBuildState> {
           v.addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), 13);
           this.selectedObject.obj.position.set(v.x, v.y - 10, v.z);
           
-          // Update position of dummy mesh for doors
           if (this.selectedObject.objType === 'door' && 
               this.selectedObject.obj.userData && 
               this.selectedObject.obj.userData.dummyMesh) {
@@ -1011,10 +982,7 @@ class GeoBuild extends Component<{}, GeoBuildState> {
     const obj = objIns(vThree, objType);
     if (!obj) return;
     
-    // Set the selectedObject based on objType
-    // For door objects, we need special handling
     if (objType === 'door') {
-      // Find the main mesh in the object's children
       const doorMesh = obj.children[0]; // First child should be our door mesh
       
       this.selectedObject = {
@@ -1028,7 +996,6 @@ class GeoBuild extends Component<{}, GeoBuildState> {
       };
     }
 
-    // Only add to scene, don't add to objs array until placed
     this.scene.add(obj);
   }
   

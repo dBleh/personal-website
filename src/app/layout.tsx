@@ -11,21 +11,13 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // pathname and isGeoBuildPage are not needed here for layout anymore
-  // const pathname = usePathname();
-  // const isGeoBuildPage = pathname === '/geobuild';
-
   const [collapsed, setCollapsed] = useState(false);
 
   return (
     <html lang="en">
-      {/* Apply classes directly, remove inline flex style */}
-      <body>
-        {/* Pass props to Sidebar (which now acts as Nav container) */}
+     
+      <body>   
         <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
-
-        {/* Apply class to main content, conditional class for collapsed state */}
-        {/* Remove inline styles for paddingLeft, height, overflowY */}
         <main className={`main-content ${collapsed ? 'sidebar-collapsed' : ''}`}>
           {children}
         </main>

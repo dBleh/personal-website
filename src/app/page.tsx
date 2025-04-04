@@ -86,23 +86,17 @@ export default function Home() {
             })}
           </ul>
         </nav>
-      )} {/* End of conditional rendering block */}
+      )} 
 
 
-      {/* --- Original Home Content --- */}
+   
       <div style={{ maxWidth: '48rem', margin: '0 auto', padding: '2rem 1rem' }}>
-        {/* Hero Section */}
         <section style={{ marginBottom: '2rem' }}>
-          {/* ... content ... */}
            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            {/* Info Column */}
             <div>
               <h1 style={{ fontSize: '2.5rem', lineHeight: 1.2, fontWeight: 'bold', marginBottom: '0.75rem', color: '#1f2937' }}>Duncan Blais</h1>
               <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#2563eb', fontWeight: 600 }}>Full Stack Developer</h2>
-
-              {/* Contact Links */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-                {/* Email */}
                 <a
                   href="mailto:Duncanblais@gmail.com"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#4b5563', textDecoration: 'none' }}
@@ -113,7 +107,6 @@ export default function Home() {
                   </svg>
                   Duncanblais@gmail.com
                 </a>
-                {/* Phone */}
                 <a
                   href="tel:672-514-8325"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#4b5563', textDecoration: 'none' }}
@@ -123,7 +116,6 @@ export default function Home() {
                   </svg>
                   672-514-8325
                 </a>
-                {/* GitHub */}
                 <a
                   href="https://github.com/dBleh"
                   target="_blank"
@@ -140,9 +132,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* About Me Section */}
         <section id="about-me-section" style={{ marginBottom: '3rem', ...scrollOffsetStyle }}>
-          {/* ... content ... */}
            <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1f2937', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>About Me</h2>
           <p style={{ fontSize: '1.125rem', color: '#4b5563', lineHeight: '1.625' }}>
             I'm a Full Stack Developer with experience in building web applications, desktop software, and game development.
@@ -152,12 +142,9 @@ export default function Home() {
           </p>
         </section>
 
-        {/* Technical Skills Section */}
         <section id="skills-section" style={{ marginBottom: '3rem', ...scrollOffsetStyle }}>
-          {/* ... content ... */}
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#1f2937', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>Technical Skills</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
-            {/* Skills Categories */}
             {[
               { title: 'Programming Languages', skills: ['C++', 'Python', 'JavaScript', 'TypeScript'] },
               { title: 'Web Development', skills: ['React.js', 'Electron.js', 'Django', 'HTML', 'CSS', 'PixiJS'] },
@@ -185,13 +172,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Featured Projects Section */}
         <section id="projects-section" style={{ ...scrollOffsetStyle }}>
-          {/* ... content ... */}
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#1f2937', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>Featured Projects</h2>
-          {/* Use a grid for project cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-              {/* Project 1 */}
               <div style={{
                   backgroundColor: 'white',
                   padding: '1.5rem',
@@ -213,7 +196,6 @@ export default function Home() {
                   </Link>
               </div>
 
-              {/* Project 2 */}
                <div style={{
                   backgroundColor: 'white',
                   padding: '1.5rem',

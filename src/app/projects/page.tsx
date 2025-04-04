@@ -1,25 +1,21 @@
-// Add this at the very top
 'use client';
 
-import React from 'react'; // Import React if not already present
+import React from 'react';
 import ProjectCard from "../../components/ProjectCard";
-import useMediaQuery from '../../hooks/useMediaQuery'; // Adjust path if needed
+import useMediaQuery from '../../hooks/useMediaQuery'; 
 
 export default function Projects() {
 
-  // --- Instantiate the hook ---
-  const isMobile = useMediaQuery('(max-width: 768px)'); // Use the same breakpoint
+  const isMobile = useMediaQuery('(max-width: 768px)'); 
 
-  // --- Define the alert handler ---
   const handleGeoBuildNotice = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault(); // Good practice for button clicks
+    e.preventDefault(); 
     alert('GeoBuild is best experienced on a desktop computer.');
   };
 
   return (
-    // Consistent Page Container
+
     <div style={{ maxWidth: '48rem', margin: '0 auto', padding: '2rem 1rem' }}>
-      {/* Page Title */}
       <h1 style={{
         fontSize: '2rem',
         fontWeight: 'bold',
@@ -31,10 +27,8 @@ export default function Projects() {
         My Projects
       </h1>
 
-      {/* Project Cards Container */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2.5rem' }}>
 
-        {/* Other Project Cards remain the same */}
         <ProjectCard
           title="Dark and Darker Tracker"
           description="An interactive map for Dark and Darker using React.js and PixiJS with a functional legend that allows users to toggle item categories dynamically. Automated file parsing for each game update using custom Python scripts to read and process game files. This project has helped over 68,000 users navigate the game world more effectively."
@@ -56,19 +50,15 @@ export default function Projects() {
           githubUrl="https://github.com/dBleh/CubeGame"
         />
 
-        {/* GeoBuild Project Card - Conditional Props */}
         <ProjectCard
           title="GeoBuild - 3D Building Tool"
           description="A 3D building and construction interface built with Three.js allowing users to place and manipulate objects in a 3D space. Features include object snapping, placement validation, and an intuitive user interface for building virtual structures."
           technologies={["Three.js", "JavaScript", "React.js"]}
-          // Conditionally pass onClick (mobile) or localUrl (desktop)
           {...(isMobile
-              ? { onClick: handleGeoBuildNotice, actionText: "Desktop Only" } // Pass onClick and custom text for mobile
-              : { localUrl: "/geobuild", actionText: "View Tool" }             // Pass localUrl and default text for desktop
+              ? { onClick: handleGeoBuildNotice, actionText: "Desktop Only" } 
+              : { localUrl: "/geobuild", actionText: "View Tool" }            
           )}
-          // Optional: Add an imageUrl="/path/to/geobuild-image.png"
         />
-
       </div>
     </div>
   );

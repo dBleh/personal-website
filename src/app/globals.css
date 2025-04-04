@@ -6,8 +6,6 @@ body {
   min-height: 100vh;
 }
 
-/* --- Base Styles (Mobile First Approach) --- */
-
 .nav-container {
   /* Mobile: Top Navbar */
   width: 100%;
@@ -28,7 +26,6 @@ body {
   overflow: hidden; /* Back to hidden, as we are trying to fit */
 }
 
-/* Container for the top section items (nav) */
 .nav-top-section {
     display: flex;
     align-items: center;
@@ -227,5 +224,3 @@ body {
   }
 }
 
-/* Style for the button used for GeoBuild notice on mobile */
-/* Inherits from .nav-links li button */
