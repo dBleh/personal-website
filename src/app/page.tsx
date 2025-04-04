@@ -137,10 +137,10 @@ export default function Home() {
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#1f2937', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>Technical Skills</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
             {[
-              { title: 'Programming Languages', skills: ['C++', 'Python', 'JavaScript', 'TypeScript'] },
+              { title: 'Programming Languages', skills: ['C++', 'Python', 'JavaScript'] },
               { title: 'Web Development', skills: ['React.js', 'Electron.js', 'Django', 'HTML', 'CSS', 'PixiJS'] },
               { title: 'Databases', skills: ['MySQL', 'MongoDB'] },
-              { title: 'Tools & Platforms', skills: ['Git', 'VS Code', 'Windows', 'Node.js', 'SFML', 'Steamworks SDK'] },
+              { title: 'Tools & Platforms', skills: ['Git', 'VS Code', 'Windows', 'Node.js', 'Steamworks SDK'] },
             ].map((category) => (
               <div key={category.title}>
                 <h3 style={{ fontWeight: 600, marginBottom: '0.75rem', color: '#374151', fontSize: '1.125rem' }}>{category.title}</h3>
