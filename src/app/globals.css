@@ -3,8 +3,8 @@ body {
   margin: 0;
   font-family: sans-serif;
   display: flex;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  /* overflow: hidden; <- Removed */
 }
 
 /* --- Base Styles (Mobile First Approach) --- */
@@ -22,41 +22,51 @@ body {
   display: flex;
   flex-direction: row;
   align-items: center;
-  /* Adjust justify-content for mobile top bar */
-  justify-content: flex-start; /* Align items to the start */
-  padding: 0 1.5rem;
+  justify-content: flex-start;
+  padding: 0 1rem; /* Reverted padding for a bit more space if needed */
   box-sizing: border-box;
   transition: none;
-  overflow: hidden;
+  /* CHANGE overflow: hidden to overflow-x: auto */
+  overflow-x: auto; /* Allows horizontal scrolling if content overflows */
+  /* Optional: Hide scrollbar visually on browsers that support it */
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }
+/* Optional: Hide scrollbar visually for Webkit browsers (Chrome, Safari) */
+.nav-container::-webkit-scrollbar {
+  display: none;
+}
+
 
 /* Container for the top section items (nav) */
 .nav-top-section {
-    display: flex; /* Use flex to layout items inside */
-    align-items: center; /* Vertically align items */
-    width: 100%; /* Take full width on mobile */
+    display: flex;
+    align-items: center;
+    /* Ensure this doesn't shrink if content is wide */
+    /* width: 100%; <- Can sometimes cause issues with overflow */
+    /* Let flexbox determine the width needed by content */
+     min-width: max-content; /* Force it to be at least as wide as its content */
 }
 
 .nav-links {
-    /* On mobile, allow nav links to take remaining space if needed */
-    flex-grow: 1;
-    display: flex; /* Needed for ul alignment */
+    /* flex-grow: 1; <- Removed, let nav-top-section control width */
+    display: flex;
 }
 
 
 .nav-links ul {
   display: flex;
-  flex-direction: row; /* Links side-by-side on mobile */
+  flex-direction: row;
   list-style: none;
   padding: 0;
   margin: 0;
   gap: 0.5rem;
-  width: 100%; /* Ensure ul takes width for potential justification */
-  /* Example: If you wanted links spread out on mobile: justify-content: space-around; */
+  /* width: 100%; <- Removed, let content determine width */
 }
 
 .nav-links li {
-    /* Add flex properties if needed for fine-grained control inside li */
+    /* Optional styles */
+    flex-shrink: 0; /* Prevent list items from shrinking */
 }
 
 /* Common styles for all nav items (Links and Buttons) */
@@ -64,19 +74,19 @@ body {
 .nav-links li button {
     display: flex;
     align-items: center;
-    gap: 0.5rem; /* Consistent gap */
+    gap: 0.5rem;
     color: white;
     text-decoration: none;
-    padding: 0.5rem 0.75rem; /* Consistent padding */
+    padding: 0.5rem 0.75rem;
     border-radius: 0.25rem;
     transition: background-color 0.2s ease;
-    white-space: nowrap;
+    white-space: nowrap; /* Keep text on one line */
     background: none;
     border: none;
     cursor: pointer;
-    font-size: inherit; /* Inherit from body/parent */
+    font-size: inherit;
     font-family: inherit;
-    text-align: left; /* Ensure text aligns left */
+    text-align: left;
 }
 
 .nav-links li a:hover,
@@ -86,12 +96,8 @@ body {
 
 /* Specific class for text spans inside links/buttons */
 .nav-link-text {
-    /* Styles for text if needed, e.g., font size */
+    /* Styles for text if needed */
 }
-
-
-/* REMOVED: .home-link specific styles */
-/* REMOVED: .home-link-container styles */
 
 .nav-bottom-section {
   display: none;
@@ -101,16 +107,16 @@ body {
   flex-grow: 1;
   padding-top: 4rem;
   padding-left: 0;
-  height: 100vh;
   box-sizing: border-box;
   overflow-y: auto;
   transition: padding-left 0.3s ease, padding-top 0.3s ease;
+  padding-bottom: 2rem; /* Keep bottom padding */
 }
 
 /* --- Desktop Styles --- */
 @media (min-width: 769px) {
   body {
-      /* flex is already set */
+      /* display: flex; is already set */
   }
 
   .nav-container {
@@ -122,12 +128,13 @@ body {
     left: 0;
     bottom: 0;
     display: flex;
-    flex-direction: column; /* Back to vertical */
-    justify-content: space-between; /* Pushes top/bottom sections */
+    flex-direction: column;
+    justify-content: space-between;
     padding: 1.5rem;
     transition: width 0.3s ease, padding 0.3s ease;
+    /* Reset overflows for desktop */
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: hidden; /* Prevent horizontal scroll on desktop */
   }
 
   .nav-container.collapsed {
@@ -137,50 +144,46 @@ body {
 
   .nav-top-section {
       width: auto; /* Reset width */
-      /* Align items vertically within this section */
-      display: block; /* Let nav take block layout */
+      display: block;
+      min-width: initial; /* Reset min-width */
   }
 
   .nav-links {
-      flex-grow: 0; /* Don't grow on desktop */
-      margin-bottom: 2rem; /* Add the space back below the nav */
+      /* flex-grow: 0; <- Already default */
+      margin-bottom: 2rem;
   }
 
   .nav-links ul {
-      flex-direction: column; /* Stack links vertically */
+      flex-direction: column;
       gap: 1rem;
-      width: auto; /* Reset width */
-      align-items: stretch; /* Stretch items by default */
+      width: auto;
+      align-items: stretch;
   }
 
    .nav-container.collapsed .nav-links ul {
-      align-items: center; /* Center icons when collapsed */
+      align-items: center;
    }
 
-   /* Adjust gap and justification for desktop links */
    .nav-links li a,
    .nav-links li button {
-       justify-content: flex-start; /* Align text left by default */
-       gap: 0.75rem; /* Desktop gap */
+       justify-content: flex-start;
+       gap: 0.75rem;
    }
 
    .nav-container.collapsed .nav-links li a,
    .nav-container.collapsed .nav-links li button {
-       justify-content: center; /* Center icon when collapsed */
-       gap: 0; /* No gap when collapsed */
+       justify-content: center;
+       gap: 0;
    }
 
-   /* Hide text span when collapsed */
    .nav-container.collapsed .nav-link-text {
        display: none;
    }
 
-   /* REMOVED: .home-link-text specific desktop styles */
-
 
   .nav-bottom-section {
-      display: block; /* Show bottom section */
-      margin-top: auto; /* Pushes to bottom if needed, works with justify-content */
+      display: block;
+      margin-top: auto;
   }
 
    .toggle-button {
@@ -220,4 +223,4 @@ body {
 }
 
 /* Style for the button used for GeoBuild notice on mobile */
-/* No change needed here, inherits from .nav-links li button */
+/* Inherits from .nav-links li button */
