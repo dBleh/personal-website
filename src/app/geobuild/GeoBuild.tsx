@@ -68,53 +68,69 @@ const objIns = (vThree: THREE.Vector3, objType: ObjectType): THREE.Object3D | nu
   }
   
   if (objType === 'door') {
-    const wall = new THREE.Shape();
-    wall.moveTo(-5, -5);
-    wall.lineTo(-5, 5);
-    wall.lineTo(5, 5);
-    wall.lineTo(5, -5);
-    wall.lineTo(-5, -5);
+    // --- MODIFICATION START ---
 
-    const door = new THREE.Shape();
-    door.moveTo(-2.5, -5);
-    door.lineTo(-2.5, 2);
-    door.lineTo(2.5, 2);
-    door.lineTo(2.5, -5);
-    door.lineTo(-2.5, -5);
-    wall.holes.push(door);
+    // 1. Define the shape with the hole (like original)
+    const wallShape = new THREE.Shape();
+    wallShape.moveTo(-5, -5);
+    wallShape.lineTo(-5, 5);
+    wallShape.lineTo(5, 5);
+    wallShape.lineTo(5, -5);
+    wallShape.lineTo(-5, -5);
 
+    const doorHole = new THREE.Shape();
+    doorHole.moveTo(-2.5, -5); // Define the hole shape
+    doorHole.lineTo(-2.5, 2);
+    doorHole.lineTo(2.5, 2);
+    doorHole.lineTo(2.5, -5);
+    doorHole.lineTo(-2.5, -5);
+    wallShape.holes.push(doorHole); // Add the hole to the wall shape
+
+    // 2. Extrude the shape (like original)
     const extrudeSettings = { depth: 0.2, bevelEnabled: false };
-    const geometry = new THREE.ExtrudeGeometry(wall, extrudeSettings);
-    // Use a solid color for the door
-    const material = new THREE.MeshBasicMaterial({ color: 0xCC313D });
-    const mesh = new THREE.Mesh(geometry, material);
+    const doorFrameGeometry = new THREE.ExtrudeGeometry(wallShape, extrudeSettings);
 
-    // Add a wireframe version on top
-    const wireframeGeometry = new THREE.WireframeGeometry(geometry);
-    const wireframeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
-    const wireframe = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
+    // 3. Create the SOLID material for the frame
+    const solidMaterial = new THREE.MeshBasicMaterial({ color: 0xCC313D });
 
-    mesh.position.set(vThree.x, vThree.y, vThree.z);
-    mesh.add(wireframe);
-    pObj.add(mesh);
-    
-    // Add a dummy box geometry that we'll use for consistent handling with other objects
-    // This is invisible but helps with snapping logic
-    const dummyGeometry = new THREE.BoxGeometry(10, 10, 0.2);
-    const dummyMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0xCC313D, 
-      transparent: true, 
-      opacity: 0 
+    // 4. Create the WIREFRAME material (like other objects)
+    const wireframeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
+
+    // 5. Create the SOLID mesh using the frame geometry
+    const solidMesh = new THREE.Mesh(doorFrameGeometry, solidMaterial);
+
+    // 6. Create the WIREFRAME mesh using the SAME frame geometry
+    const wireframeMesh = new THREE.Mesh(doorFrameGeometry, wireframeMaterial);
+
+    // 7. Add the wireframe mesh AS A CHILD of the solid mesh (like other objects)
+    solidMesh.add(wireframeMesh);
+
+    // 8. Set the position of the combined object (solid + wireframe child)
+    solidMesh.position.set(vThree.x, vThree.y, vThree.z);
+
+    // 9. Add the main solid mesh (which contains the wireframe) to the parent Object3D
+    pObj.add(solidMesh);
+
+    // 10. Keep the dummy box geometry for consistent snapping/interaction logic
+    // (This seemed necessary in your original code, likely for reliable bounding box checks)
+    const dummyGeometry = new THREE.BoxGeometry(10, 10, 0.2); // Same size as wall
+    const dummyMaterial = new THREE.MeshBasicMaterial({
+      // color: 0xCC313D, // Color doesn't matter if invisible
+      transparent: true,
+      opacity: 0,
+      depthWrite: false // Optimization: don't write to depth buffer
     });
     const dummyMesh = new THREE.Mesh(dummyGeometry, dummyMaterial);
-    dummyMesh.position.copy(mesh.position);
-    dummyMesh.visible = false;
-    mesh.userData.dummyMesh = dummyMesh;
-    pObj.add(dummyMesh);
-    
+    dummyMesh.position.copy(solidMesh.position); // Match position
+    dummyMesh.visible = false; // Make it invisible
+    // Store reference on the VISIBLE mesh's userData if needed elsewhere
+    solidMesh.userData.dummyMesh = dummyMesh;
+    pObj.add(dummyMesh); // Add the dummy mesh to the parent Object3D as well
+
+    // --- MODIFICATION END ---
     return pObj;
   }
-  
+
   // Default fallback - create a simple cube
   const objGeometry = new THREE.BoxGeometry(5, 5, 5);
   const material = new THREE.MeshBasicMaterial({ color: 0x8AAAE5 });
@@ -1061,7 +1077,7 @@ class GeoBuild extends Component<{}, GeoBuildState> {
 
   render() {
     return (
-      <div style={{ position: 'relative', width: '90%', height: '100vh', overflow: 'hidden', marginLeft: '200px', marginTop:'-10px' }}>
+      <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', marginLeft: '0px', marginTop:'0px' }}>
         
         <div
           ref={(mount) => {
