@@ -7,22 +7,9 @@ export default function Home() {
     <div style={{ maxWidth: '48rem', margin: '0 auto', padding: '2rem 1rem' }}>
       {/* Hero Section */}
       <section className="mb-12"> {/* Using className for spacing from globals.css if defined, or use style={{ marginBottom: '3rem' }} */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', '@media (min-width: 768px)': { flexDirection: 'row', alignItems: 'flex-start' }}}> {/* Basic responsive styles inline */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem'}}> {/* Basic responsive styles inline */}
           {/* Profile image placeholder */}
-          <div style={{
-              position: 'relative',
-              width: '12rem', // 192px
-              height: '12rem',
-              borderRadius: '9999px', // Full circle
-              overflow: 'hidden',
-              border: '4px solid #374151', // Slightly darker border than before
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', // Standard shadow
-              flexShrink: 0, // Prevent shrinking in flex layout
-              backgroundColor: '#e5e7eb' // Placeholder background
-            }}>
-            {/* TODO: Add an actual Image component here later */}
-            {/* <Image src="/path/to/your/image.jpg" alt="Duncan Blais Profile" layout="fill" objectFit="cover" /> */}
-          </div>
+          
 
           {/* Info Column */}
           <div>
