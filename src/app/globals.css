@@ -4,7 +4,6 @@ body {
   font-family: sans-serif;
   display: flex;
   min-height: 100vh;
-  /* overflow: hidden; <- Removed */
 }
 
 /* --- Base Styles (Mobile First Approach) --- */
@@ -23,34 +22,24 @@ body {
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  padding: 0 1rem; /* Reverted padding for a bit more space if needed */
+  padding: 0 0.5rem; /* Reduce overall container padding slightly */
   box-sizing: border-box;
   transition: none;
-  /* CHANGE overflow: hidden to overflow-x: auto */
-  overflow-x: auto; /* Allows horizontal scrolling if content overflows */
-  /* Optional: Hide scrollbar visually on browsers that support it */
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  overflow: hidden; /* Back to hidden, as we are trying to fit */
 }
-/* Optional: Hide scrollbar visually for Webkit browsers (Chrome, Safari) */
-.nav-container::-webkit-scrollbar {
-  display: none;
-}
-
 
 /* Container for the top section items (nav) */
 .nav-top-section {
     display: flex;
     align-items: center;
-    /* Ensure this doesn't shrink if content is wide */
-    /* width: 100%; <- Can sometimes cause issues with overflow */
-    /* Let flexbox determine the width needed by content */
-     min-width: max-content; /* Force it to be at least as wide as its content */
+    width: 100%;
+    /* min-width: max-content; <- Remove this, we want it to fit */
 }
 
 .nav-links {
-    /* flex-grow: 1; <- Removed, let nav-top-section control width */
     display: flex;
+    flex-grow: 1; /* Allow it to try and fill space */
+    justify-content: space-between; /* Distribute items evenly */
 }
 
 
@@ -60,13 +49,16 @@ body {
   list-style: none;
   padding: 0;
   margin: 0;
-  gap: 0.5rem;
-  /* width: 100%; <- Removed, let content determine width */
+  /* REDUCE gap significantly */
+  gap: 0.1rem; /* Drastically reduced gap */
+  width: 100%; /* Allow flexbox justification to work */
+  /* Add justification to spread items out */
+  justify-content: space-between; /* This will spread the items across the available width */
+  align-items: center; /* Ensure vertical alignment */
 }
 
 .nav-links li {
-    /* Optional styles */
-    flex-shrink: 0; /* Prevent list items from shrinking */
+   /* flex-shrink: 0; <- May not be needed if justify-content is used */
 }
 
 /* Common styles for all nav items (Links and Buttons) */
@@ -74,17 +66,19 @@ body {
 .nav-links li button {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    /* Keep vertical gap reasonable */
+    gap: 0.25rem; /* Slightly reduce gap between icon and text */
     color: white;
     text-decoration: none;
-    padding: 0.5rem 0.75rem;
+    /* REDUCE horizontal padding */
+    padding: 0.5rem 0.3rem; /* Reduced horizontal padding */
     border-radius: 0.25rem;
     transition: background-color 0.2s ease;
-    white-space: nowrap; /* Keep text on one line */
+    white-space: nowrap;
     background: none;
     border: none;
     cursor: pointer;
-    font-size: inherit;
+    font-size: 0.85rem; /* Slightly reduce font size as last resort */
     font-family: inherit;
     text-align: left;
 }
@@ -110,7 +104,7 @@ body {
   box-sizing: border-box;
   overflow-y: auto;
   transition: padding-left 0.3s ease, padding-top 0.3s ease;
-  padding-bottom: 2rem; /* Keep bottom padding */
+  padding-bottom: 2rem;
 }
 
 /* --- Desktop Styles --- */
@@ -130,11 +124,11 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    /* Restore desktop padding */
     padding: 1.5rem;
     transition: width 0.3s ease, padding 0.3s ease;
-    /* Reset overflows for desktop */
     overflow-y: auto;
-    overflow-x: hidden; /* Prevent horizontal scroll on desktop */
+    overflow-x: hidden; /* Keep hidden */
   }
 
   .nav-container.collapsed {
@@ -143,31 +137,42 @@ body {
   }
 
   .nav-top-section {
-      width: auto; /* Reset width */
+      width: auto;
       display: block;
-      min-width: initial; /* Reset min-width */
+      /* min-width: initial; <- Already default */
   }
 
   .nav-links {
-      /* flex-grow: 0; <- Already default */
+      /* Reset mobile justification */
+      justify-content: flex-start;
+      flex-grow: 0;
       margin-bottom: 2rem;
   }
 
   .nav-links ul {
       flex-direction: column;
+      /* Restore desktop gap */
       gap: 1rem;
       width: auto;
       align-items: stretch;
+       /* Reset mobile justification */
+      justify-content: flex-start;
   }
 
    .nav-container.collapsed .nav-links ul {
       align-items: center;
    }
 
+   /* Restore desktop styles for links */
    .nav-links li a,
    .nav-links li button {
        justify-content: flex-start;
+       /* Restore desktop gaps */
        gap: 0.75rem;
+       /* Restore desktop padding */
+       padding: 0.5rem 0.75rem;
+       /* Restore desktop font size */
+       font-size: inherit;
    }
 
    .nav-container.collapsed .nav-links li a,
