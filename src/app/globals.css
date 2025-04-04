@@ -1,17 +1,223 @@
-
-
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-
-
+/* globals.css */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  font-family: sans-serif;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
 }
+
+/* --- Base Styles (Mobile First Approach) --- */
+
+.nav-container {
+  /* Mobile: Top Navbar */
+  width: 100%;
+  height: 4rem;
+  background-color: #1f2937;
+  color: white;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  /* Adjust justify-content for mobile top bar */
+  justify-content: flex-start; /* Align items to the start */
+  padding: 0 1rem;
+  box-sizing: border-box;
+  transition: none;
+  overflow: hidden;
+}
+
+/* Container for the top section items (nav) */
+.nav-top-section {
+    display: flex; /* Use flex to layout items inside */
+    align-items: center; /* Vertically align items */
+    width: 100%; /* Take full width on mobile */
+}
+
+.nav-links {
+    /* On mobile, allow nav links to take remaining space if needed */
+    flex-grow: 1;
+    display: flex; /* Needed for ul alignment */
+}
+
+
+.nav-links ul {
+  display: flex;
+  flex-direction: row; /* Links side-by-side on mobile */
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  gap: 0.5rem;
+  width: 100%; /* Ensure ul takes width for potential justification */
+  /* Example: If you wanted links spread out on mobile: justify-content: space-around; */
+}
+
+.nav-links li {
+    /* Add flex properties if needed for fine-grained control inside li */
+}
+
+/* Common styles for all nav items (Links and Buttons) */
+.nav-links li a,
+.nav-links li button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* Consistent gap */
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 0.75rem; /* Consistent padding */
+    border-radius: 0.25rem;
+    transition: background-color 0.2s ease;
+    white-space: nowrap;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: inherit; /* Inherit from body/parent */
+    font-family: inherit;
+    text-align: left; /* Ensure text aligns left */
+}
+
+.nav-links li a:hover,
+.nav-links li button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Specific class for text spans inside links/buttons */
+.nav-link-text {
+    /* Styles for text if needed, e.g., font size */
+}
+
+
+/* REMOVED: .home-link specific styles */
+/* REMOVED: .home-link-container styles */
+
+.nav-bottom-section {
+  display: none;
+}
+
+.main-content {
+  flex-grow: 1;
+  padding-top: 4rem;
+  padding-left: 0;
+  height: 100vh;
+  box-sizing: border-box;
+  overflow-y: auto;
+  transition: padding-left 0.3s ease, padding-top 0.3s ease;
+}
+
+/* --- Desktop Styles --- */
+@media (min-width: 769px) {
+  body {
+      /* flex is already set */
+  }
+
+  .nav-container {
+    /* Desktop: Sidebar */
+    width: 10rem;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column; /* Back to vertical */
+    justify-content: space-between; /* Pushes top/bottom sections */
+    padding: 1.5rem;
+    transition: width 0.3s ease, padding 0.3s ease;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .nav-container.collapsed {
+      width: 4rem;
+      padding: 1.5rem 0.5rem;
+  }
+
+  .nav-top-section {
+      width: auto; /* Reset width */
+      /* Align items vertically within this section */
+      display: block; /* Let nav take block layout */
+  }
+
+  .nav-links {
+      flex-grow: 0; /* Don't grow on desktop */
+      margin-bottom: 2rem; /* Add the space back below the nav */
+  }
+
+  .nav-links ul {
+      flex-direction: column; /* Stack links vertically */
+      gap: 1rem;
+      width: auto; /* Reset width */
+      align-items: stretch; /* Stretch items by default */
+  }
+
+   .nav-container.collapsed .nav-links ul {
+      align-items: center; /* Center icons when collapsed */
+   }
+
+   /* Adjust gap and justification for desktop links */
+   .nav-links li a,
+   .nav-links li button {
+       justify-content: flex-start; /* Align text left by default */
+       gap: 0.75rem; /* Desktop gap */
+   }
+
+   .nav-container.collapsed .nav-links li a,
+   .nav-container.collapsed .nav-links li button {
+       justify-content: center; /* Center icon when collapsed */
+       gap: 0; /* No gap when collapsed */
+   }
+
+   /* Hide text span when collapsed */
+   .nav-container.collapsed .nav-link-text {
+       display: none;
+   }
+
+   /* REMOVED: .home-link-text specific desktop styles */
+
+
+  .nav-bottom-section {
+      display: block; /* Show bottom section */
+      margin-top: auto; /* Pushes to bottom if needed, works with justify-content */
+  }
+
+   .toggle-button {
+        background-color: rgba(255, 255, 255, 0.1);
+        border: none;
+        color: white;
+        cursor: pointer;
+        padding: 0.75rem;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        border-radius: 0.25rem;
+        margin-bottom: 1rem;
+   }
+
+   .copyright {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.6);
+        text-align: center;
+        padding: 0.5rem 0;
+        white-space: nowrap;
+   }
+   .nav-container.collapsed .copyright-text {
+      display: none;
+   }
+
+
+  .main-content {
+      padding-left: 10rem;
+      padding-top: 0;
+  }
+
+  .main-content.sidebar-collapsed {
+      padding-left: 4rem;
+  }
+}
+
+/* Style for the button used for GeoBuild notice on mobile */
+/* No change needed here, inherits from .nav-links li button */

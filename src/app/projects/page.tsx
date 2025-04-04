@@ -24,7 +24,7 @@ export default function Projects() {
           title="Dark and Darker Tracker"
           description="An interactive map for Dark and Darker using React.js and PixiJS with a functional legend that allows users to toggle item categories dynamically. Automated file parsing for each game update using custom Python scripts to read and process game files. This project has helped over 68,000 users navigate the game world more effectively."
           technologies={["React.js", "PixiJS", "Node.js", "Python", "JavaScript"]}
-          githubUrl="https://github.com/NoahMacRitchie/dad-helper"
+          //githubUrl="https://github.com/NoahMacRitchie/dad-helper"
           demoUrl="https://darkanddarkertracker.com"
           // Optional: Add an imageUrl="/path/to/dad-tracker-image.png"
         />
