@@ -24,7 +24,7 @@ body {
   align-items: center;
   /* Adjust justify-content for mobile top bar */
   justify-content: flex-start; /* Align items to the start */
-  padding: 0 1rem;
+  padding: 0 1.5rem;
   box-sizing: border-box;
   transition: none;
   overflow: hidden;
