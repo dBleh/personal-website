@@ -16,7 +16,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   // Handler for the GeoBuild notice on mobile
   const handleGeoBuildNotice = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault(); // Prevent any default button action
-    alert('GeoBuild is best experienced on a desktop computer.');
+    alert('GeoBuild is not available on Mobile devices');
   };
 
   // Determine whether to show text based on collapsed state AND screen size
