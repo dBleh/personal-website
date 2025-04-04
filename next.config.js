@@ -51,7 +51,7 @@ const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   // Optimize output for static site
-  output: 'export',
+  output: 'standalone',
   // Add support for TypeScript path aliases if you use them
   swcMinify: true,
 };
