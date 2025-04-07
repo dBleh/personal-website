@@ -2,11 +2,13 @@
 import React, { CSSProperties } from 'react';
 import Link from 'next/link';
 import useMediaQuery from '../hooks/useMediaQuery'; // Adjust path if needed
+import useIsMobile from '../hooks/usIsMobile';
 
 export default function Home() {
 
   // --- Instantiate the hook ---
-  const isMobile = useMediaQuery('(max-width: 768px)'); // Use the same breakpoint
+  const isSmallBrower = useMediaQuery('(max-width: 768px)'); // Use the same breakpoint
+  
 
   // --- Copied Styles from Info.tsx ---
   const navBarStyle: CSSProperties = {
@@ -67,7 +69,7 @@ export default function Home() {
 
       {/* --- Conditionally Rendered In-Page Navigation Bar --- */}
       {/* Only render this nav if NOT mobile */}
-      {!isMobile && (
+      {!isSmallBrower && (
         <nav style={navBarStyle}>
           <ul style={navListStyle}>
             {navLinksData.map((link, index) => {

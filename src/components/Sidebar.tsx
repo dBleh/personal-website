@@ -4,33 +4,33 @@
 import Link from 'next/link';
 import React from 'react';
 import useMediaQuery from '../hooks/useMediaQuery'; // Adjust path
-
+import useIsMobile from '../hooks/usIsMobile';
 interface SidebarProps {
   collapsed: boolean;
   setCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
-  const isMobile = useMediaQuery('(max-width: 768px)'); 
-
+  const isSmallBrower = useMediaQuery('(max-width: 768px)'); 
+  const isMobile = useIsMobile()
 
   const handleGeoBuildNotice = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault(); 
     alert('GeoBuild is not available on Mobile devices');
   };
 
-  const showText = isMobile ? true : !collapsed; 
-  const showFullCopyright = isMobile ? false : !collapsed;
+  const showText = isSmallBrower ? true : !collapsed; 
+  const showFullCopyright = isSmallBrower ? false : !collapsed;
 
 
-  const navContainerClasses = `nav-container ${!isMobile && collapsed ? 'collapsed' : ''}`;
+  const navContainerClasses = `nav-container ${!isSmallBrower && collapsed ? 'collapsed' : ''}`;
 
   return (
     <div className={navContainerClasses}>
       <div className="nav-top-section">
         <nav
           className="nav-links"
-          style={{ marginBottom: isMobile ? '0' : '2rem' }}
+          style={{ marginBottom: isSmallBrower ? '0' : '2rem' }}
         >
           <ul>
             <li>
@@ -56,7 +56,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
             </li>
             <li>
               {isMobile ? (
-                 <button onClick={handleGeoBuildNotice} title="GeoBuild (Desktop Recommended)">
+                 <button onClick={handleGeoBuildNotice} title="GeoBuild (Desktop Required)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
                     <span className="nav-link-text">GeoBuild</span>
                 </button>
@@ -70,7 +70,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
           </ul>
         </nav>
       </div> 
-      {!isMobile && (
+      {!isSmallBrower && (
          <div className="nav-bottom-section">
             <button
                 onClick={() => setCollapsed(!collapsed)}
