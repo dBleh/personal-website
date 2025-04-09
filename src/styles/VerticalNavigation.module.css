@@ -1,0 +1,93 @@
+
+.container {
+    --nav-line-color: #60a5fa;
+    --nav-line-hover-color: #2563eb;
+    --nav-label-color: #374151;
+    --nav-label-active-color: var(--nav-line-hover-color);
+    --nav-label-bg: rgba(255, 255, 255, 0.95);
+    --nav-transition-speed: 0.3s;
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    right: 1rem; 
+    height: clamp(200px, 60vh, 500px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; 
+    z-index: 1000;
+    user-select: none; 
+  }
+  
+  .line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: calc(100% + 0.75rem); 
+    width: 2px;
+    background-color: var(--nav-line-color);
+    cursor: pointer;
+    z-index: 1;
+    transition: 
+      width var(--nav-transition-speed) ease,
+      background-color var(--nav-transition-speed) ease;
+    border-radius: 2px; 
+  }
+  
+  .line:hover {
+    width: 4px;
+    background-color: var(--nav-line-hover-color);
+  }
+    
+  .navList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    height: 100%;
+    width: auto; 
+    position: relative; 
+  }
+  
+  .navItem {
+    position: absolute;
+    right: 30px;
+    transform: translateY(-50%); 
+    z-index: 2;
+    display: flex; 
+    align-items: center; 
+  }
+  
+  .navLink {
+    display: flex; 
+    align-items: center;
+    text-decoration: none;
+    position: relative; 
+    padding: 0.1rem 0; 
+  }
+  
+
+  .label {
+    color: var(--nav-label-color);
+    font-weight: 500;
+    background-color: var(--nav-label-bg);
+    padding: 0.3rem 1rem; 
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+    white-space: nowrap;
+    opacity: 1; 
+    transform: translateX(0);
+    pointer-events: auto;
+    transition: 
+      color var(--nav-transition-speed) ease,
+      font-weight var(--nav-transition-speed) ease;
+    z-index: 2; 
+  }
+  
+  .navLink:hover .label {
+    color: var(--nav-label-active-color); 
+  }
+  
+  .navLink.active .label {
+    color: var(--nav-label-active-color); 
+    font-weight: 700; 
+  }
+  

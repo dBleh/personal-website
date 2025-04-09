@@ -1,62 +1,75 @@
 'use client';
 
 import React from 'react';
-import ProjectCard from "../../components/ProjectCard";
+import ProjectCard from "../../components/ProjectCard"; 
 import useMediaQuery from '../../hooks/useMediaQuery'; 
 
 export default function Projects() {
 
-  const isMobile = useMediaQuery('(max-width: 768px)'); 
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
-  const handleGeoBuildNotice = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleGeoBuildNotice = (e: React.MouseEvent) => {
     e.preventDefault(); 
-    alert('GeoBuild is best experienced on a desktop computer.');
+    alert('GeoBuild is optimized for desktop use. Please view on a larger screen for the best experience.');
   };
 
   return (
-
-    <div style={{ maxWidth: '48rem', margin: '0 auto', padding: '2rem 1rem' }}>
+    
+    <div style={{ maxWidth: '64rem', margin: '0 auto', padding: '2rem 1rem 4rem 1rem', minHeight: 'calc(100vh - 8rem)' }}> 
       <h1 style={{
-        fontSize: '2rem',
+        fontSize: '2.25rem', 
         fontWeight: 'bold',
-        marginBottom: '2rem',
+        marginBottom: '2.5rem', 
         color: '#1f2937',
         borderBottom: '2px solid #3b82f6',
-        paddingBottom: '1rem'
+        paddingBottom: '0.75rem' 
       }}>
         My Projects
       </h1>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2.5rem' }}>
+    
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem' }}>
 
         <ProjectCard
           title="Dark and Darker Tracker"
-          description="An interactive map for Dark and Darker using React.js and PixiJS with a functional legend that allows users to toggle item categories dynamically. Automated file parsing for each game update using custom Python scripts to read and process game files. This project has helped over 68,000 users navigate the game world more effectively."
-          technologies={["React.js", "PixiJS", "Node.js", "Python", "JavaScript"]}
+          description="Developed an interactive web map for the game Dark and Darker using React.js and PixiJS. Features dynamic item filtering via a functional legend and automated game file parsing with Python scripts for seamless updates. Proudly supported over 68,000 users in navigating the game's dungeons."
+          technologies={["React.js", "PixiJS", "Node.js", "Python", "JavaScript", "HTML/CSS"]}
+       
+          imageUrl="/images/darkanddarker.png" 
+          videoUrl="/videos/DarkVid.mp4" 
           demoUrl="https://darkanddarkertracker.com"
         />
 
         <ProjectCard
           title="Vancouver Lighting - Tag Creation Automation"
-          description="A desktop application built for Vancouver Lighting to automate their tag creation process. Developed using Electron.js and React.js with a Django backend to process PDF files and populate tag data. This tool successfully automated a previously manual workflow, reducing the processing time by over 50% and significantly improving operational efficiency."
-          technologies={["React.js", "Electron.js", "Django", "Python", "JavaScript"]}
+          description="Engineered a cross-platform desktop application (Electron.js/React.js) with a Python/Django backend for Vancouver Lighting. This tool automates the creation of product tags directly from PDF files, drastically reducing manual processing time by over 50% and significantly boosting operational efficiency."
+          technologies={["React.js", "Electron.js", "Django", "Python", "JavaScript", "CSS"]}
+           
+          imageUrl="/images/vantags.png" 
           githubUrl="https://github.com/dBleh/Van-Tags"
         />
 
         <ProjectCard
-          title="Multiplayer Steam Game"
-          description="Currently developing a multiplayer 2D game with P2P connections entirely in C++ without a game engine. Implementing custom networking and real-time game mechanics using SFML and Steamworks SDK. This project involves managing game logic, rendering, and multiplayer synchronization from scratch."
-          technologies={["C++", "SFML", "Steamworks SDK"]}
+          title="Multiplayer Steam Game (In Development)"
+          description="Building a 2D peer-to-peer multiplayer game from the ground up in C++, intentionally avoiding commercial game engines. Implementing custom networking (using Steamworks SDK P2P), rendering (with SFML), and state synchronization logic from scratch. A deep dive into low-level game development challenges."
+          technologies={["C++", "SFML", "Steamworks SDK", "Networking", "Game Logic"]}
+          
+          imageUrl="/images/cuboid.png" 
           githubUrl="https://github.com/dBleh/CubeGame"
         />
 
         <ProjectCard
-          title="GeoBuild - 3D Building Tool"
-          description="A 3D building and construction interface built with Three.js allowing users to place and manipulate objects in a 3D space. Features include object snapping, placement validation, and an intuitive user interface for building virtual structures."
-          technologies={["Three.js", "JavaScript", "React.js"]}
+          title="GeoBuild - 3D Web Construction Tool"
+          description="Created a web-based 3D construction interface using Three.js and React. Allows users to intuitively place, manipulate, and snap virtual objects within a 3D environment. Features include placement validation logic and a user-friendly interface designed for building virtual structures directly in the browser."
+          technologies={["Three.js", "React.js", "JavaScript", "HTML/CSS"]}
+          
+          imageUrl="/images/geobuild.png"
+          
           {...(isMobile
-              ? { onClick: handleGeoBuildNotice, actionText: "Desktop Only" } 
-              : { localUrl: "/geobuild", actionText: "View Tool" }            
+             
+              ? { onCardClickOverride: handleGeoBuildNotice, actionTextOverride: "Desktop Recommended" } 
+             
+              : { localUrl: "/geobuild" } 
           )}
         />
       </div>

@@ -1,5 +1,5 @@
 'use client';
-import useIsMobile from '../../hooks/usIsMobile';
+import useIsMobile from '../../hooks/useIsMobile';
 export default function GeoBuildLayout({
   children,
 }: {

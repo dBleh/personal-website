@@ -1,1251 +1,906 @@
 'use client';
 
-import React, { Component } from 'react';
-
+import React, { Component, RefObject } from 'react';
 import * as THREE from 'three';
-import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
-import { DragControls } from 'three/examples/jsm/controls/DragControls';
 
-interface GeoBuildState {
-  mouseX: number | null;
-  mouseY: number | null;
-  isVisible: boolean;
-  showInstructions: boolean;
+import { GeoBuildState, ObjectType, SceneObject, ThreeContext } from './types';
+import { objIns } from './objectFactory';
+import { addSnaps, getIntersectObj, setPosition } from './snapping';
+import { initializeThreeScene } from './threeSetup';
+
+interface GeoBuildComponentState extends GeoBuildState {
+  isRemovalMode: boolean;
 }
 
-type ObjectType = 'floor' | 'wall' | 'roof' | 'door';
+class GeoBuild extends Component<{}, GeoBuildComponentState> {
+  private mountRef: RefObject<HTMLDivElement>;
+  private threeContext: (ThreeContext & { cleanup: () => void }) | null = null;
 
-interface SceneObject {
-  obj: THREE.Object3D;
-  objType: ObjectType;
-  side?: string;
-}
-
-const objIns = (vThree: THREE.Vector3, objType: ObjectType): THREE.Object3D | null => {  
-  if (!(vThree instanceof THREE.Vector3)) {
-    throw new Error('vThree must be an instance of THREE.Vector3');
-  }
-  const pObj = new THREE.Object3D();
-  
-  if (objType === 'floor') {
-    const objGeometry = new THREE.BoxGeometry(10, 5, 10);
-    const material = new THREE.MeshBasicMaterial({ color: 0xEEA47F });
-    const wireframeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
-    const obj = new THREE.Mesh(objGeometry, material);
-    const wireframeMesh = new THREE.Mesh(objGeometry, wireframeMaterial);
-    obj.add(wireframeMesh);
-    obj.position.set(vThree.x, vThree.y, vThree.z);
-    pObj.add(obj);
-    return pObj;
-  }
-  
-  if (objType === 'wall') {
-    const objGeometry = new THREE.BoxGeometry(10, 10, 0.2);
-    const material = new THREE.MeshBasicMaterial({ color: 0x0539CFF });
-    const wireframeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
-    const obj = new THREE.Mesh(objGeometry, material);
-    const wireframeMesh = new THREE.Mesh(objGeometry, wireframeMaterial);
-    obj.add(wireframeMesh);
-    obj.position.set(vThree.x, vThree.y, vThree.z);
-    pObj.add(obj);
-    return pObj;
-  }
-  
-  if (objType === 'roof') {
-    const objGeometry = new THREE.BoxGeometry(10, 0.2, 10);
-    const material = new THREE.MeshBasicMaterial({ color: 0x317773 });
-    const wireframeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
-    const obj = new THREE.Mesh(objGeometry, material);
-    const wireframeMesh = new THREE.Mesh(objGeometry, wireframeMaterial);
-    obj.add(wireframeMesh);
-    obj.position.set(vThree.x, vThree.y, vThree.z);
-    pObj.add(obj);
-    return pObj;
-  }
-  
-  if (objType === 'door') {
-    const wallShape = new THREE.Shape();
-    wallShape.moveTo(-5, -5);
-    wallShape.lineTo(-5, 5);
-    wallShape.lineTo(5, 5);
-    wallShape.lineTo(5, -5);
-    wallShape.lineTo(-5, -5);
-
-    const doorHole = new THREE.Shape();
-    doorHole.moveTo(-2.5, -5); // Define the hole shape
-    doorHole.lineTo(-2.5, 2);
-    doorHole.lineTo(2.5, 2);
-    doorHole.lineTo(2.5, -5);
-    doorHole.lineTo(-2.5, -5);
-    wallShape.holes.push(doorHole); // Add the hole to the wall shape
-
-    const extrudeSettings = { depth: 0.2, bevelEnabled: false };
-    const doorFrameGeometry = new THREE.ExtrudeGeometry(wallShape, extrudeSettings);
-
-    const solidMaterial = new THREE.MeshBasicMaterial({ color: 0xCC313D });
-
-    const wireframeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
-
-    const solidMesh = new THREE.Mesh(doorFrameGeometry, solidMaterial);
-
-    const wireframeMesh = new THREE.Mesh(doorFrameGeometry, wireframeMaterial);
-
-    solidMesh.add(wireframeMesh);
-
-    solidMesh.position.set(vThree.x, vThree.y, vThree.z);
-
-    pObj.add(solidMesh);
-
-    const dummyGeometry = new THREE.BoxGeometry(10, 10, 0.2); // Same size as wall
-    const dummyMaterial = new THREE.MeshBasicMaterial({
-      // color: 0xCC313D, // Color doesn't matter if invisible
-      transparent: true,
-      opacity: 0,
-      depthWrite: false // Optimization: don't write to depth buffer
-    });
-    const dummyMesh = new THREE.Mesh(dummyGeometry, dummyMaterial);
-    dummyMesh.position.copy(solidMesh.position); // Match position
-    dummyMesh.visible = false; // Make it invisible
-    solidMesh.userData.dummyMesh = dummyMesh;
-    pObj.add(dummyMesh); // Add the dummy mesh to the parent Object3D as well
-    return pObj;
-  }
-
-  // Default fallback - create a simple cube
-  const objGeometry = new THREE.BoxGeometry(5, 5, 5);
-  const material = new THREE.MeshBasicMaterial({ color: 0x8AAAE5 });
-  const wireframeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
-  const obj = new THREE.Mesh(objGeometry, material);
-  const wireframeMesh = new THREE.Mesh(objGeometry, wireframeMaterial);
-  obj.add(wireframeMesh);
-  obj.position.set(vThree.x, vThree.y, vThree.z);
-  pObj.add(obj);
-  return pObj;
-};
-
-// Add snap points to objects
-const addSnaps = (selectedObject: SceneObject, isVisible: boolean): SceneObject[] => {
-  const snapObjs: SceneObject[] = [];
-  const objGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const matT = new THREE.MeshBasicMaterial({ color: 0xf00fff });
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  
-  if (selectedObject.objType === 'floor') {
-    // Add snap points to floor object
-    const snapPositions = {
-      right: new THREE.Vector3(5, 2, 0),
-      back: new THREE.Vector3(0, 2, 5),
-      front: new THREE.Vector3(0, 2, -5),
-      left: new THREE.Vector3(-5, 2, 0),
-    };
-
-    const q = new THREE.Quaternion();
-    q.copy(selectedObject.obj.quaternion);
-
-    snapPositions.right.applyQuaternion(q);
-    snapPositions.left.applyQuaternion(q);
-    snapPositions.front.applyQuaternion(q);
-    snapPositions.back.applyQuaternion(q);
-
-    const snapObjLeft = new THREE.Mesh(objGeometry, mat);
-    snapObjLeft.position.copy(selectedObject.obj.position).add(snapPositions.left);
-    snapObjLeft.quaternion.copy(selectedObject.obj.quaternion);
-    snapObjLeft.rotateY(Math.PI / 2);
-    if (selectedObject.obj.parent) {
-      selectedObject.obj.parent.add(snapObjLeft);
-    }
-    snapObjLeft.visible = isVisible;
-    snapObjs.push({
-      obj: snapObjLeft,
-      objType: 'floor',
-      side: 'left'
-    });
-    
-    const snapObjRight = new THREE.Mesh(objGeometry, mat);
-    snapObjRight.position.copy(selectedObject.obj.position).add(snapPositions.right);
-    snapObjRight.quaternion.copy(selectedObject.obj.quaternion);
-    snapObjRight.rotateY(-Math.PI / 2);
-    if (selectedObject.obj.parent) {
-      selectedObject.obj.parent.add(snapObjRight);
-    }
-    snapObjRight.visible = isVisible;
-    snapObjs.push({
-      obj: snapObjRight,
-      objType: 'floor',
-      side: 'right'
-    });
-    
-    const snapObjBack = new THREE.Mesh(objGeometry, matT);
-    snapObjBack.position.copy(selectedObject.obj.position).add(snapPositions.back);
-    snapObjBack.quaternion.copy(selectedObject.obj.quaternion);
-    snapObjBack.rotateY(Math.PI);
-    if (selectedObject.obj.parent) {
-      selectedObject.obj.parent.add(snapObjBack);
-    }
-    snapObjBack.visible = isVisible;
-    snapObjs.push({
-      obj: snapObjBack,
-      objType: 'floor',
-      side: 'back'
-    });
-    
-    const snapObjFront = new THREE.Mesh(objGeometry, matT);
-    snapObjFront.position.copy(selectedObject.obj.position).add(snapPositions.front);
-    snapObjFront.quaternion.copy(selectedObject.obj.quaternion);
-    if (selectedObject.obj.parent) {
-      selectedObject.obj.parent.add(snapObjFront);
-    }
-    snapObjFront.visible = isVisible;
-    snapObjs.push({
-      obj: snapObjFront,
-      objType: 'floor',
-      side: 'front'
-    });
-    
-    return snapObjs;
-  }
-  
-  if (selectedObject.objType === 'wall') {
-    // Add snap point to wall object for roof connection
-    const snapPos = new THREE.Vector3(0, 5, -0.1);
-    const snapObj = new THREE.Mesh(objGeometry, mat);
-    snapPos.applyQuaternion(selectedObject.obj.quaternion);
-    snapObj.position.copy(selectedObject.obj.position).add(snapPos);
-    snapObj.quaternion.copy(selectedObject.obj.quaternion);
-    if (selectedObject.obj.parent) {
-      selectedObject.obj.parent.add(snapObj);
-    }
-    snapObj.visible = isVisible;
-    snapObjs.push({
-      obj: snapObj,
-      objType: 'wall',
-    });
-    
-    return snapObjs;
-  }
-  
-  if (selectedObject.objType === 'door') {
-    // Add snap point to door object for roof connection (same as wall)
-    const snapPos = new THREE.Vector3(0, 5, -0.1);
-    const snapObj = new THREE.Mesh(objGeometry, mat);
-    snapPos.applyQuaternion(selectedObject.obj.quaternion);
-    snapObj.position.copy(selectedObject.obj.position).add(snapPos);
-    snapObj.quaternion.copy(selectedObject.obj.quaternion);
-    if (selectedObject.obj.parent) {
-      selectedObject.obj.parent.add(snapObj);
-    }
-    snapObj.visible = isVisible;
-    snapObjs.push({
-      obj: snapObj,
-      objType: 'door',
-    });
-    
-    return snapObjs;
-  }
-  
-  return snapObjs;
-};
-
-// Function to check for intersection between objects
-const getIntersectObj = (object: SceneObject, snapRadius: THREE.Mesh): SceneObject | false => {
-  const bounds = new THREE.Box3().setFromObject(object.obj);
-  const radiusBounds = new THREE.Box3().setFromObject(snapRadius);
-  const intersects = bounds.intersectsBox(radiusBounds);
-  
-  if (intersects) {
-    return object;
-  }
-  
-  return false;
-};
-
-// Function to set position of snapped objects
-const setPosition = (objToSnap: SceneObject, selectedObject: SceneObject, snapRadius: THREE.Mesh): THREE.Vector3 | false => {
-  let offset = 0;
-  
-  if (selectedObject.objType === 'wall' && selectedObject.obj instanceof THREE.Mesh && 
-      selectedObject.obj.geometry instanceof THREE.BoxGeometry) {
-    offset = selectedObject.obj.geometry.parameters.height / 2 + 0.5;
-  } else if (selectedObject.objType === 'floor') {
-    offset = -2;
-  } else if (selectedObject.objType === 'roof') {
-    offset = 0.1;
-  } else if (selectedObject.objType === 'door') {
-    // For doors, use 5 as a default height if we can't get it from geometry
-    offset = 5.5;
-  }
-  
-  // Get the direction of the snapped object
-  const snappedDirection = new THREE.Vector3(0, 0, -1);
-  snappedDirection.applyQuaternion(objToSnap.obj.quaternion);
-  
-  // Set the position of the selected object to the position of the snapped object
-  selectedObject.obj.position.copy(objToSnap.obj.position);
-  selectedObject.obj.position.y += offset;
-  
-  // Handle different object types and their snapping behavior
-  if (selectedObject.objType === "floor") {
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 0, -1), snappedDirection);
-    selectedObject.obj.quaternion.copy(q);
-    
-    // Move the selected object slightly away from the snapped object
-    const direction = snappedDirection.clone().multiplyScalar(5);
-    selectedObject.obj.position.add(direction);
-  }
-  
-  if (selectedObject.objType === "wall") {
-    // Apply the snapped direction to the selected object's quaternion
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 0, -1), snappedDirection);
-    selectedObject.obj.quaternion.copy(q);
-    
-    // Move the selected object slightly away from the snapped object
-    const direction = snappedDirection.clone().multiplyScalar(-0.1);
-    selectedObject.obj.position.add(direction);
-    
-    if (objToSnap.objType === "roof") {
-      selectedObject.obj.position.y -= 1;
-    }
-    
-    if (objToSnap.objType === "wall") {
-      selectedObject.obj.position.y -= 0.5;
-    }
-  }
-  
-  if (selectedObject.objType === 'roof') {
-    // Roof can only snap to walls or doors
-    if (objToSnap.objType !== 'wall' && objToSnap.objType !== 'door') {
-      return false;
-    }
-    
-    const object1Position = objToSnap.obj.position.clone();
-    const object1Orientation = new THREE.Vector3(0, 0, 1);
-    const object2WorldPosition = new THREE.Vector3();
-    snapRadius.getWorldPosition(object2WorldPosition);
-    const vectorToObject2 = object2WorldPosition.clone().sub(object1Position);
-    
-    // Calculate the dot product of the orientation and vector to object2
-    const dotProduct = object1Orientation.dot(vectorToObject2);
-    
-    // Apply the snapped direction to the selected object's quaternion
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 0, -1), snappedDirection);
-    selectedObject.obj.quaternion.copy(q);
-    
-    // Move the selected object away from the snapped object
-    let direction;
-    if (dotProduct < 0) {
-      direction = snappedDirection.clone().multiplyScalar(4.8);
-    } else {
-      direction = snappedDirection.clone().multiplyScalar(-5);
-    }
-    selectedObject.obj.position.add(direction);
-  }
-  
-  if (selectedObject.objType === "door") {
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 0, -1), snappedDirection);
-    selectedObject.obj.quaternion.copy(q);
-    
-    // Move the selected object slightly away from the snapped object
-    const direction = snappedDirection.clone().multiplyScalar(-0.1);
-    selectedObject.obj.position.add(direction);
-    
-    if (objToSnap.objType === "roof") {
-      selectedObject.obj.position.y -= 1;
-    }
-    
-    if (objToSnap.objType === "wall") {
-      selectedObject.obj.position.y -= 0.5;
-    }
-    if (selectedObject.obj.userData && selectedObject.obj.userData.dummyMesh) {
-      selectedObject.obj.userData.dummyMesh.position.copy(selectedObject.obj.position);
-      selectedObject.obj.userData.dummyMesh.quaternion.copy(selectedObject.obj.quaternion);
-    }
-  }
-  
-  return selectedObject.obj.position;
-};
-
-class GeoBuild extends Component<{}, GeoBuildState> {
+  private frameId: number = 0;
+  private initialized: boolean = false;
   private selectedObject: SceneObject | null = null;
-  private cubes: THREE.Object3D[] = [];
-  private grid: any[] = [];
-  private isDragging: boolean = false;
-  private snapObjs: SceneObject[] = [];
   private objs: SceneObject[] = [];
+  private snapObjs: SceneObject[] = [];
   private objToSnap: SceneObject | null = null;
-  private objHighlighted: any = null;
-  private origMat: THREE.Material | null = null;
-  private isStarted: boolean = false;
+  private objHighlighted: THREE.Intersection | null = null;
+  private origMat: THREE.Material | THREE.Material[] | null = null;
+  private boundMat: THREE.Material | THREE.Material[] | null = null;
+
+  private isDraggingObject: boolean = false;
   private wIsDown: boolean = false;
-  private eIsdown: boolean = false;
   private sIsDown: boolean = false;
   private aIsDown: boolean = false;
   private dIsDown: boolean = false;
   private spaceIsDown: boolean = false;
-  private lControl: boolean = false;
-  private inBound: boolean = false;
-  private boundMat: THREE.Material | null = null;
-  private time: Date = new Date();
-  private lastTime: Date = new Date();
-  private scene!: THREE.Scene;
-  private camera!: THREE.PerspectiveCamera;
-  private lockControls!: PointerLockControls;
-  private renderer!: THREE.WebGLRenderer;
-  private light!: THREE.PointLight;
-  private geometry!: THREE.BoxGeometry;
-  private material!: THREE.MeshBasicMaterial;
-  private gridHelper!: THREE.GridHelper;
-  private snapRadius!: THREE.Mesh;
-  private dragControls!: DragControls;
-  private mount: HTMLDivElement | null = null;
-  private frameId: number = 0;
-  private initialized: boolean = false;
+  private xIsDown: boolean = false;
+  private eIsDown: boolean = false;
+  private isPointerLocked: boolean = false;
+  private inPlacementBounds: boolean = true;
+
+  private lastTime: number = Date.now();
 
   constructor(props: {}) {
     super(props);
-    
+    this.mountRef = React.createRef();
+
     this.state = {
       mouseX: null,
       mouseY: null,
       isVisible: false,
-      showInstructions: false
+      showInstructions: true,
+      isRemovalMode: false,
     };
 
-    // Binding methods
-    this.handleMouseMove = this.handleMouseMove.bind(this);
-    this.handleKeyDown = this.handleKeyDown.bind(this);
-    this.handleMouseDown = this.handleMouseDown.bind(this);
-    this.handleKeyUp = this.handleKeyUp.bind(this);
+    this.init = this.init.bind(this);
+    this.cleanup = this.cleanup.bind(this);
     this.animate = this.animate.bind(this);
+    this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleKeyUp = this.handleKeyUp.bind(this);
+    this.handleMouseMove = this.handleMouseMove.bind(this);
+    this.handleMouseDown = this.handleMouseDown.bind(this);
+    this.handleContextMenu = this.handleContextMenu.bind(this);
+    this.addObj = this.addObj.bind(this);
+    this.placeSelectedObject = this.placeSelectedObject.bind(this);
+    this.removeSelectedObject = this.removeSelectedObject.bind(this);
+    this.removeHighlightedObject = this.removeHighlightedObject.bind(this);
+    this.resetHighlight = this.resetHighlight.bind(this);
+    this.clearScene = this.clearScene.bind(this);
     this.toggleInstructions = this.toggleInstructions.bind(this);
     this.toggleSnapPoints = this.toggleSnapPoints.bind(this);
-    this.clearScene = this.clearScene.bind(this);
-    this.initScene = this.initScene.bind(this);
   }
 
-  initScene() {
-    if (this.initialized || typeof window === 'undefined') return;
-
-    this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      2000
-    );
-    this.lockControls = new PointerLockControls(this.camera, document.body);
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.light = new THREE.PointLight(0xffffff, 1, 100);
-    this.light.position.set(0, 0, 10);
-    this.geometry = new THREE.BoxGeometry(1, 1, 1);
-    this.material = new THREE.MeshBasicMaterial({ color: 0x8AAAE5 });
-    this.gridHelper = new THREE.GridHelper(100, 100, 0x444444, 0x888788);
-    this.snapRadius = new THREE.Mesh(
-      new THREE.SphereGeometry(5, 32, 32), 
-      this.material
-    );
-    
-    this.scene.add(this.lockControls.getObject());
-    this.snapRadius.position.set(0, 0, 0);
-    this.scene.add(this.snapRadius);
-
-    this.dragControls = new DragControls(
-      this.cubes, 
-      this.camera, 
-      this.renderer.domElement
-    );
-
-    // Camera setup
-    this.camera.position.y = 20;
-    this.camera.position.z = 10;
-    this.camera.rotation.x = -0.5;
-    this.scene.add(this.light);
-    this.scene.add(this.gridHelper);
-
-    // Set up renderer
-    this.renderer.setClearColor(0xFAF9F6);
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    if (this.mount) {
-      this.mount.appendChild(this.renderer.domElement);
-    }
-
-    // Set up event listeners
-    this.dragControls.addEventListener('dragstart', (event) => {
-      this.isDragging = true;
-      const obj = event.object as THREE.Mesh;
-      if (obj.material) {
-        // Handle both single material and material array cases
-        if (Array.isArray(obj.material)) {
-          obj.material.forEach(mat => {
-            if ('opacity' in mat) {
-              mat.opacity = 0.33;
-            }
-          });
-        } else if ('opacity' in obj.material) {
-          obj.material.opacity = 0.33;
-        }
-      }
-    });
-    
-    this.dragControls.addEventListener('dragend', (event) => {
-      this.isDragging = false;
-      const obj = event.object as THREE.Mesh;
-      if (obj.material) {
-        // Handle both single material and material array cases
-        if (Array.isArray(obj.material)) {
-          obj.material.forEach(mat => {
-            if ('opacity' in mat) {
-              mat.opacity = 1;
-            }
-          });
-        } else if ('opacity' in obj.material) {
-          obj.material.opacity = 1;
-        }
-      }
-    });
-    
-    document.addEventListener('keydown', this.handleKeyDown);
-    document.addEventListener('mousedown', this.handleMouseDown);
-    document.addEventListener('mousemove', this.handleMouseMove);
-    document.addEventListener('keyup', this.handleKeyUp);
-
-    // Add ambient light for better visibility
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    this.scene.add(ambientLight);
-
-    // Start animation
-    this.animate();
-    this.initialized = true;
-  }
 
   componentDidMount() {
-    // Necessary for both direct page load and client navigation
-    this.initScene();
-  }
-
-  componentDidUpdate() {
-    // Ensure initialization happens after client navigation
-    if (!this.initialized) {
-      this.initScene();
-    }
+    this.init();
   }
 
   componentWillUnmount() {
+    this.cleanup();
+  }
+
+
+  init() {
+    if (this.initialized || typeof window === 'undefined' || !this.mountRef.current) return;
+
+    const dragHandlers = {
+      onDragStart: (event: THREE.Event) => {
+        this.isDraggingObject = true;
+        if (this.threeContext) this.threeContext.pointerLockControls.unlock();
+      },
+      onDragEnd: (event: THREE.Event) => {
+        this.isDraggingObject = false;
+        if (!this.eIsDown && !this.state.isRemovalMode && this.threeContext && !this.isPointerLocked) {
+          this.threeContext.pointerLockControls.lock();
+        }
+      }
+    };
+
+    this.threeContext = initializeThreeScene(
+      this.mountRef.current,
+      [],
+      dragHandlers
+    );
+
+    this.mountRef.current.addEventListener('mousedown', this.handleMouseDown);
+    this.mountRef.current.addEventListener('contextmenu', this.handleContextMenu);
+
+    document.addEventListener('keydown', this.handleKeyDown);
+    document.addEventListener('keyup', this.handleKeyUp);
+    document.addEventListener('mousemove', this.handleMouseMove);
+
+    this.threeContext.pointerLockControls.addEventListener('lock', () => {
+      this.isPointerLocked = true;
+      const popup = document.getElementById("geo-popup");
+      if (popup) popup.style.display = "none";
+      this.eIsDown = false;
+      if (this.state.isRemovalMode) {
+        this.setState({ isRemovalMode: false });
+        this.resetHighlight();
+        document.body.style.cursor = 'default';
+      }
+    });
+    this.threeContext.pointerLockControls.addEventListener('unlock', () => {
+      this.isPointerLocked = false;
+    });
+
+    this.initialized = true;
+    this.lastTime = Date.now();
+    this.animate();
+  }
+
+  cleanup() {
     if (this.frameId) {
       cancelAnimationFrame(this.frameId);
     }
-    
+
     document.removeEventListener('keydown', this.handleKeyDown);
-    document.removeEventListener('mousedown', this.handleMouseDown);
-    document.removeEventListener('mousemove', this.handleMouseMove);
     document.removeEventListener('keyup', this.handleKeyUp);
-    
-    if (this.mount && this.renderer?.domElement) {
-      this.mount.removeChild(this.renderer.domElement);
+    document.removeEventListener('mousemove', this.handleMouseMove);
+    if (this.mountRef.current) {
+      this.mountRef.current.removeEventListener('mousedown', this.handleMouseDown);
+      this.mountRef.current.removeEventListener('contextmenu', this.handleContextMenu);
     }
-    
+
+    this.threeContext?.cleanup();
+    document.body.style.cursor = 'default';
+
     this.initialized = false;
-  }
-
-  handleMouseMove(event: MouseEvent) {
-    if (this.selectedObject) {
-      const deltaY = event.movementX * 0.002;
-      this.selectedObject.obj.rotation.y -= deltaY;
-      this.selectedObject.obj.rotation.z = 0;
-      
-      if (this.selectedObject.objType === 'door' && 
-          this.selectedObject.obj.userData && 
-          this.selectedObject.obj.userData.dummyMesh) {
-        this.selectedObject.obj.userData.dummyMesh.rotation.y = this.selectedObject.obj.rotation.y;
-        this.selectedObject.obj.userData.dummyMesh.rotation.z = 0;
-      }
-    }
-    
-    if (this.objs && this.objs.length > 0 && !this.selectedObject) {
-      const raycaster = new THREE.Raycaster();
-      const mouse = new THREE.Vector2();
-      
-      // Calculate mouse position in normalized device coordinates
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-      // Set the origin and direction of the raycaster
-      raycaster.setFromCamera(mouse, this.camera);
-      
-      // Collect all objects and their children for intersection test
-      const objsToTest: THREE.Object3D[] = [];
-      this.objs.forEach(obj => {
-        objsToTest.push(obj.obj);
-        if (obj.obj.children && obj.obj.children.length > 0) {
-          obj.obj.children.forEach(child => {
-            if ((child as THREE.Mesh).isMesh) {
-              objsToTest.push(child);
-            }
-          });
-        }
-      });
-      
-      const intersects = raycaster.intersectObjects(objsToTest, true);
-
-      const basicMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0xffffff, 
-        wireframe: true 
-      });
-      
-      if (intersects.length > 0) {
-        // If another object was previously highlighted, reset its material
-        if (this.objHighlighted !== null) {
-          const obj = this.objHighlighted.object as THREE.Mesh;
-          if (obj.material && this.origMat) {
-            obj.material = this.origMat;
-          }
-        }
-        
-        // Set the material of the intersected object to the basic material
-        this.objHighlighted = intersects[0];
-        const obj = this.objHighlighted.object as THREE.Mesh;
-        if (obj.material) {
-          this.origMat = obj.material as THREE.Material;
-          obj.material = basicMaterial;
-        }
-      } else {
-        // If there are no intersections, reset previously highlighted object
-        if (this.objHighlighted !== null) {
-          const obj = this.objHighlighted.object as THREE.Mesh;
-          if (obj.material && this.origMat) {
-            obj.material = this.origMat;
-          }
-          this.objHighlighted = null;
-          this.origMat = null;
-        }
-      }
-    }
-  }
-
-  // Helper method to remove the currently selected object
-  removeSelectedObject() {
-    if (!this.selectedObject) return;
-    
-    // Remove the object from the scene
-    if (this.selectedObject.obj.parent) {
-      this.scene.remove(this.selectedObject.obj.parent);
-    }
-    
-    // Remove any associated snap points
-    for (let b = 0; b < this.snapObjs.length; b++) {
-      if (this.snapObjs[b].obj.parent === this.selectedObject.obj.parent) {
-        this.scene.remove(this.snapObjs[b].obj);
-        this.snapObjs.splice(b, 1);
-        b = b - 1;
-      }
-    }
-    
-    // Reset the selected object
+    this.objs = [];
+    this.snapObjs = [];
     this.selectedObject = null;
     this.objToSnap = null;
+    this.objHighlighted = null;
+    this.setState({ isRemovalMode: false });
   }
 
-  handleMouseDown() {
-    if (!this.eIsdown) {
-      if (!this.inBound) {
-        if (this.selectedObject) {
-          // Don't place the object if not in a valid position
-          this.removeSelectedObject();
-        }
-      } else {
-        if (this.selectedObject) {
-          // Add object to the objs array now that it's being placed
-          this.objs.push({
-            obj: this.selectedObject.obj,
-            objType: this.selectedObject.objType,
-          });
-          
-          // Add snap points when placing an object
-          const newSnaps = addSnaps(this.selectedObject, this.state.isVisible);
-          if (newSnaps) {
-            newSnaps.forEach((obj) => {
-              this.snapObjs.push(obj);
-            });
-          }
-          
-          this.selectedObject = null;
-          this.objToSnap = null;
-        }
-      }
-    }
-    
-    if (this.eIsdown) {
-      if (this.selectedObject) {
-        // Remove the selected object when clicking in the object menu
-        this.removeSelectedObject();
-      }
-    }
-  }
 
   handleKeyDown(event: KeyboardEvent) {
-    if (event.keyCode === 69) { // E key
-      this.eIsdown = true;
-      const popup = document.getElementById("geo-popup");
-      if (popup) popup.style.display = "block";
-      this.lockControls.unlock();
-    }
+    if (!this.threeContext) return;
 
-    if (event.keyCode === 87) { // W key
-      this.wIsDown = true;
-    }
-    
-    if (event.keyCode === 82) { // R key
-      if (this.objHighlighted) {
-        // Find the object in our objs array
-        let objToRemove: SceneObject | null = null;
-        let objIndex = -1;
-        
-        for (let i = 0; i < this.objs.length; i++) {
-          // Check if the highlighted object is either the object itself or a child or parent
-          const isMatch = 
-            this.objs[i].obj === this.objHighlighted.object || 
-            this.objs[i].obj.parent === this.objHighlighted.object.parent ||
-            this.objHighlighted.object.parent === this.objs[i].obj;
-          
-          if (isMatch) {
-            objToRemove = this.objs[i];
-            objIndex = i;
-            break;
-          }
+    switch (event.code) {
+      case 'KeyE':
+        if (this.state.isRemovalMode) return;
+
+        if (this.selectedObject) {
+           this.removeSelectedObject(false);
         }
-        
-        if (objToRemove && objToRemove.obj.parent) {
-          // Remove the object and its parent
-          this.scene.remove(objToRemove.obj.parent);
-          
-          // Remove from objs array
-          if (objIndex > -1) {
-            this.objs.splice(objIndex, 1);
+
+        this.eIsDown = true;
+        this.threeContext.pointerLockControls.unlock();
+        const popup = document.getElementById("geo-popup");
+        if (popup) popup.style.display = "block";
+        break;
+
+      case 'KeyR':
+        const enteringRemoval = !this.state.isRemovalMode;
+        this.setState({ isRemovalMode: enteringRemoval });
+
+        if (enteringRemoval) {
+          if (this.selectedObject) this.removeSelectedObject(false);
+          if (this.eIsDown) {
+              const popupE = document.getElementById("geo-popup");
+              if (popupE) popupE.style.display = "none";
+              this.eIsDown = false;
           }
-          
-          // Remove associated snap points
-          for (let j = 0; j < this.snapObjs.length; j++) {
-            if (this.snapObjs[j].obj && this.snapObjs[j].obj.parent === objToRemove.obj.parent) {
-              this.scene.remove(this.snapObjs[j].obj);
-              this.snapObjs.splice(j, 1);
-              j = j - 1;
-            }
-          }
+          this.threeContext.pointerLockControls.unlock();
+          this.resetHighlight();
+          document.body.style.cursor = 'crosshair';
+        } else {
+          this.resetHighlight();
+          document.body.style.cursor = 'default';
         }
-        
-        this.objHighlighted = null;
-        this.origMat = null;
-      }
-    }
-    
-    if (event.keyCode === 83) { // S key
-      this.sIsDown = true;
-    }
-    
-    if (event.keyCode === 65) { // A key
-      this.aIsDown = true;
-    }
-    
-    if (event.keyCode === 68) { // D key
-      this.dIsDown = true;
-    }
-    
-    if (event.key === " ") { // Space key
-      this.spaceIsDown = true;
-    }
-    
-    if (event.keyCode === 88) { // X key
-      this.lControl = true;
+        break;
+
+      case 'Escape':
+        if (this.state.isRemovalMode) {
+          this.setState({ isRemovalMode: false });
+          this.resetHighlight();
+          document.body.style.cursor = 'default';
+        } else if (this.selectedObject) {
+          this.removeSelectedObject(false);
+          if (!this.isPointerLocked) this.threeContext.pointerLockControls.lock();
+        } else if (this.eIsDown) {
+          const popupEsc = document.getElementById("geo-popup");
+          if (popupEsc) popupEsc.style.display = "none";
+          this.eIsDown = false;
+          if (!this.isPointerLocked) this.threeContext.pointerLockControls.lock();
+        } else if (this.isPointerLocked) {
+          this.threeContext.pointerLockControls.unlock();
+        }
+        break;
+
+      case 'KeyW': this.wIsDown = true; break;
+      case 'KeyS': this.sIsDown = true; break;
+      case 'KeyA': this.aIsDown = true; break;
+      case 'KeyD': this.dIsDown = true; break;
+      case 'Space': this.spaceIsDown = true; break;
+      case 'KeyX': this.xIsDown = true; break;
     }
   }
 
   handleKeyUp(event: KeyboardEvent) {
-    if (event.keyCode === 69) { // E key
-      const popup = document.getElementById("geo-popup");
-      if (popup) popup.style.display = "none";
-      this.eIsdown = false;
-      this.lockControls.lock();
-    }
-    
-    if (event.keyCode === 87) { // W key
-      this.wIsDown = false;
-    }
-    
-    if (event.keyCode === 83) { // S key
-      this.sIsDown = false;
-    }
-    
-    if (event.keyCode === 65) { // A key
-      this.aIsDown = false;
-    }
-    
-    if (event.keyCode === 68) { // D key
-      this.dIsDown = false;
-    }
-    
-    if (event.keyCode === 32) { // Space key
-      this.spaceIsDown = false;
-    }
-    
-    if (event.keyCode === 88) { // X key
-      this.lControl = false;
+    if (!this.threeContext) return;
+
+    switch (event.code) {
+      case 'KeyE':
+        const popup = document.getElementById("geo-popup");
+        if (!popup || popup.style.display === 'none') {
+            this.eIsDown = false;
+        }
+        break;
+      case 'KeyW': this.wIsDown = false; break;
+      case 'KeyS': this.sIsDown = false; break;
+      case 'KeyA': this.aIsDown = false; break;
+      case 'KeyD': this.dIsDown = false; break;
+      case 'Space': this.spaceIsDown = false; break;
+      case 'KeyX': this.xIsDown = false; break;
     }
   }
 
-  animate() {
-    if (!this.initialized) {
-      this.frameId = window.requestAnimationFrame(this.animate);
+  handleMouseMove(event: MouseEvent) {
+    if (!this.threeContext) return;
+
+    if (this.isPointerLocked && this.selectedObject && !this.state.isRemovalMode && !this.eIsDown) {
+      const movementX = event.movementX || 0;
+      const rotateSpeed = 0.003;
+      this.selectedObject.obj.rotation.y -= movementX * rotateSpeed;
+      this.selectedObject.obj.rotation.x = 0;
+      this.selectedObject.obj.rotation.z = 0;
+      if (this.selectedObject.objType === 'door' && this.selectedObject.obj.userData.dummyMesh) {
+        this.selectedObject.obj.userData.dummyMesh.quaternion.copy(this.selectedObject.obj.quaternion);
+      }
+    }
+
+    if (this.state.isRemovalMode && !this.isPointerLocked && this.objs.length > 0) {
+      this.highlightObjectOnHover(event);
+    } else if (this.objHighlighted) {
+      this.resetHighlight();
+    }
+  }
+
+  handleMouseDown(event: MouseEvent) {
+    if (!this.threeContext) return;
+
+    if (event.button === 2) {
+        return;
+    }
+
+    const target = event.target as HTMLElement;
+    if (target.tagName === 'BUTTON' || target.closest('button') || target.closest('#geo-popup') || target.closest('.button-container')) {
       return;
     }
-    
-    this.time = new Date();
-    const deltaTime = this.time.getTime() - this.lastTime.getTime();
-    this.lastTime = this.time;
 
-    if (this.selectedObject) {
-      const v = this.camera.getWorldPosition(new THREE.Vector3());
-      v.addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), 13);
-      this.snapRadius.position.set(v.x, v.y - 10, v.z);
-      
-      if (this.snapObjs.length === 0) {
-        const v = this.camera.getWorldPosition(new THREE.Vector3());
-        v.addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), 13);
-        this.selectedObject.obj.position.set(v.x, v.y - 10, v.z);
-        
-        // Update position of dummy mesh for doors
-        if (this.selectedObject.objType === 'door' && 
-            this.selectedObject.obj.userData && 
-            this.selectedObject.obj.userData.dummyMesh) {
-          this.selectedObject.obj.userData.dummyMesh.position.copy(this.selectedObject.obj.position);
-        }
-      } else {
-        // Check for snap points intersection
-        let snapped = false;
-        
-        for (let i = 0; i < this.snapObjs.length; i++) {
-          this.objToSnap = null;
-          const intersectedObj = getIntersectObj(this.snapObjs[i], this.snapRadius);
-          
-          if (intersectedObj) {
-            // Special check for roof - can only snap to wall or door
-            if (this.selectedObject.objType === 'roof' && 
-               (intersectedObj.objType !== 'wall' && intersectedObj.objType !== 'door')) {
-              continue;
-            }
-            
-            // Special check for door - can only snap to floor like walls do
-            if (this.selectedObject.objType === 'door' && 
-               intersectedObj.objType !== 'floor') {
-              continue;
-            }
-            
-            this.objToSnap = intersectedObj;
-            
-            // Set position based on intersection
-            const snapPosition = setPosition(intersectedObj, this.selectedObject, this.snapRadius);
-            if (snapPosition) {
-              this.selectedObject.obj.position.copy(snapPosition);
-              
-              // Update position of dummy mesh for doors
-              if (this.selectedObject.objType === 'door' && 
-                  this.selectedObject.obj.userData && 
-                  this.selectedObject.obj.userData.dummyMesh) {
-                this.selectedObject.obj.userData.dummyMesh.position.copy(snapPosition);
-              }
-              
-              snapped = true;
-              break;
-            }
-          }
-        }
-        
-        // If not snapped to any object, keep at camera position
-        if (!snapped) {
-          const v = this.camera.getWorldPosition(new THREE.Vector3());
-          v.addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), 13);
-          this.selectedObject.obj.position.set(v.x, v.y - 10, v.z);
-          
-          if (this.selectedObject.objType === 'door' && 
-              this.selectedObject.obj.userData && 
-              this.selectedObject.obj.userData.dummyMesh) {
-            this.selectedObject.obj.userData.dummyMesh.position.copy(this.selectedObject.obj.position);
-          }
-        }
+    if (this.state.isRemovalMode) {
+      if (this.objHighlighted) {
+        this.removeHighlightedObject();
       }
-      
-      this.snapRadius.visible = true;
+      return;
     }
-    
-    if (this.selectedObject) {
-      if (this.selectedObject.objType === 'floor' || 
-          this.selectedObject.objType === 'wall' || 
-          this.selectedObject.objType === 'door' ||
-          this.selectedObject.objType === 'roof') {
-        if (this.boundMat === null) {
-          // Store the original material
-          const mesh = this.selectedObject.obj as THREE.Mesh;
-          if (mesh.material) {
-            this.boundMat = (mesh.material as THREE.Material).clone();
-          }
-        }
+
+    if (this.eIsDown) {
+      const popup = document.getElementById("geo-popup");
+      if (popup && !popup.contains(event.target as Node)) {
+        popup.style.display = "none";
+        this.eIsDown = false;
+        if (!this.isPointerLocked) this.threeContext.pointerLockControls.lock();
       }
-      
-      // Check if object is in valid position
-      const mesh = this.selectedObject.obj as THREE.Mesh;
-      
-      if ((this.selectedObject.objType === 'floor') && 
-          (this.selectedObject.obj.position.y < -5 || this.selectedObject.obj.position.y > 5)) {
-        mesh.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-        this.inBound = false;
-      } else if (this.selectedObject.objType === 'roof' && !this.objToSnap) {
-        // Roof can only be placed on walls or doors
-        mesh.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-        this.inBound = false;
-      } else if ((this.selectedObject.objType === 'wall' || this.selectedObject.objType === 'door') && 
-        !this.objToSnap) {
-        mesh.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-        this.inBound = false;
-      } else {
-        this.inBound = true;
-        if (this.boundMat) {
-          // Restore original material
-          mesh.material = this.boundMat;
-          this.boundMat = null;
-        }
-      }
+      return;
     }
 
-    if (!this.isDragging) {
-      this.snapRadius.visible = false;
-    }
-
-    // Handle camera movement
-    if (this.wIsDown) {
-      this.camera.position.addScaledVector(
-        this.camera.getWorldDirection(new THREE.Vector3()), 
-        0.01 * deltaTime
-      );
-    }
-
-    if (this.sIsDown) {
-      this.camera.position.addScaledVector(
-        this.camera.getWorldDirection(new THREE.Vector3()), 
-        -0.01 * deltaTime
-      );
-    }
-
-    if (this.aIsDown) {
-      this.camera.translateX(-0.01 * deltaTime);
-    }
-
-    if (this.dIsDown) {
-      this.camera.translateX(0.01 * deltaTime);
-    }
-
-    if (this.spaceIsDown) {
-      this.camera.translateY(0.01 * deltaTime);
-    }
-
-    if (this.lControl) {
-      this.camera.translateY(-0.01 * deltaTime);
-    }
-
-    this.renderScene();
-    this.frameId = window.requestAnimationFrame(this.animate);
-  }
-
-  renderScene() {
-    if (this.renderer && this.scene && this.camera) {
-      this.renderer.render(this.scene, this.camera);
-    }
-  }
-
-  addObj(objType: ObjectType) {
-    const vThree = new THREE.Vector3(
-      this.camera.position.x, 
-      this.camera.position.y, 
-      this.camera.position.z
-    );
-
-    // Move the object in front of the camera
-    vThree.addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), 20);
-
-    // If an object is currently selected, remove it without placing it
-    if (this.selectedObject) {
-      this.removeSelectedObject();
-    }
-
-    const obj = objIns(vThree, objType);
-    if (!obj) return;
-    
-    if (objType === 'door') {
-      const doorMesh = obj.children[0]; // First child should be our door mesh
-      
-      this.selectedObject = {
-        obj: doorMesh,
-        objType: objType,
-      };
+    if (!this.isPointerLocked) {
+      this.threeContext.pointerLockControls.lock();
     } else {
-      this.selectedObject = {
-        obj: obj.children[0],
-        objType: objType,
-      };
+      if (this.selectedObject) {
+        if (this.inPlacementBounds) {
+          this.placeSelectedObject();
+        } else {
+          console.warn("Cannot place object: Invalid position.");
+        }
+      }
+    }
+  }
+
+  handleContextMenu(event: MouseEvent) {
+    if (!this.threeContext) return;
+
+    event.preventDefault();
+
+    if (this.selectedObject) {
+        this.removeSelectedObject(false);
+
+    }
+  }
+
+
+  animate() {
+    if (!this.initialized || !this.threeContext) {
+      if(this.frameId) cancelAnimationFrame(this.frameId);
+      return;
     }
 
-    this.scene.add(obj);
+    this.frameId = requestAnimationFrame(this.animate);
+
+    const currentTime = Date.now();
+    const deltaTime = currentTime - this.lastTime;
+    this.lastTime = currentTime;
+
+    if (this.isPointerLocked) {
+      this.updateCameraMovement(deltaTime);
+    }
+
+    if (this.selectedObject) {
+        this.updateSelectedObjectPosition();
+        this.checkPlacementBounds();
+    } else {
+        if(this.threeContext?.snapRadius) this.threeContext.snapRadius.visible = false;
+    }
+
+    this.threeContext.renderer.render(this.threeContext.scene, this.threeContext.camera);
   }
-  
-  // Method to clear the entire scene
-  clearScene() {
-    // Remove all objects
-    for (let i = this.objs.length - 1; i >= 0; i--) {
-      if (this.objs[i].obj.parent) {
-        this.scene.remove(this.objs[i].obj.parent!);
-      }
-    }
-    
-    // Remove all snap points
-    for (let i = this.snapObjs.length - 1; i >= 0; i--) {
-      if (this.snapObjs[i].obj.parent) {
-        this.scene.remove(this.snapObjs[i].obj.parent!);
-      }
-    }
-    
-    // Clear arrays
-    this.objs = [];
-    this.snapObjs = [];
-    
-    // Reset other properties
-    this.selectedObject = null;
+
+  updateCameraMovement(deltaTime: number) {
+    const moveSpeed = 0.01;
+    const actualMoveSpeed = moveSpeed * deltaTime;
+    const controls = this.threeContext!.pointerLockControls;
+
+    if (this.wIsDown) controls.moveForward(actualMoveSpeed);
+    if (this.sIsDown) controls.moveForward(-actualMoveSpeed);
+    if (this.aIsDown) controls.moveRight(-actualMoveSpeed);
+    if (this.dIsDown) controls.moveRight(actualMoveSpeed);
+
+    const verticalSpeed = moveSpeed * deltaTime;
+    if (this.spaceIsDown) this.threeContext!.camera.position.y += verticalSpeed;
+    if (this.xIsDown) this.threeContext!.camera.position.y -= verticalSpeed;
+  }
+
+
+  updateSelectedObjectPosition() {
+    const { camera, snapRadius } = this.threeContext!;
+    const placementDistance = 15;
+
+    const camDirection = camera.getWorldDirection(new THREE.Vector3());
+    const camPosition = camera.getWorldPosition(new THREE.Vector3());
+    const radiusPosition = camPosition.clone().addScaledVector(camDirection, placementDistance);
+    snapRadius.position.copy(radiusPosition);
+    snapRadius.visible = true;
+
+    let snapped = false;
     this.objToSnap = null;
+
+    for (const potentialSnapTarget of this.snapObjs) {
+        const intersectedSnapPoint = getIntersectObj(potentialSnapTarget, snapRadius);
+        if (intersectedSnapPoint) {
+            let canSnap = false;
+            const placingType = this.selectedObject!.objType;
+            const targetType = intersectedSnapPoint.objType;
+
+            if (placingType === 'floor') canSnap = true;
+            else if (placingType === 'wall' || placingType === 'door') canSnap = (targetType === 'floor');
+            else if (placingType === 'roof') canSnap = (targetType === 'wall' || targetType === 'door');
+
+            if (canSnap) {
+                const snapPositionResult = setPosition(intersectedSnapPoint, this.selectedObject!, snapRadius);
+                if (snapPositionResult) {
+                    this.objToSnap = intersectedSnapPoint;
+                    snapped = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!snapped) {
+      const targetPos = camPosition.clone().addScaledVector(camDirection, placementDistance);
+      targetPos.y = Math.max(targetPos.y - 2, 0);
+      this.selectedObject!.obj.position.copy(targetPos);
+
+      if (this.selectedObject!.objType === 'door' && this.selectedObject!.obj.userData.dummyMesh) {
+          this.selectedObject!.obj.userData.dummyMesh.position.copy(targetPos);
+          this.selectedObject!.obj.userData.dummyMesh.quaternion.copy(this.selectedObject!.obj.quaternion);
+      }
+    }
+  }
+
+  checkPlacementBounds() {
+      if (!this.selectedObject!.obj) return;
+
+      let isValid = true;
+      const errorMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: false, transparent: true, opacity: 0.7 });
+
+       const placingType = this.selectedObject!.objType;
+      const targetType = this.objToSnap?.objType;
+
+      if (placingType !== 'floor' && !this.objToSnap) {
+          isValid = false;
+      } else if ((placingType === 'wall' || placingType === 'door') && targetType !== 'floor') {
+          isValid = false;
+      } else if (placingType === 'roof' && targetType !== 'wall' && targetType !== 'door') {
+          isValid = false;
+      }
+
+      const mesh = this.selectedObject!.obj as THREE.Mesh;
+      if (!isValid) {
+          if (!this.boundMat) {
+              if (mesh.material !== errorMaterial) {
+                  this.boundMat = mesh.material;
+              }
+          }
+           if (mesh.material !== errorMaterial) {
+                mesh.material = errorMaterial;
+           }
+          this.inPlacementBounds = false;
+      } else {
+          if (this.boundMat) {
+              mesh.material = this.boundMat;
+              this.boundMat = null;
+          }
+          this.inPlacementBounds = true;
+      }
+  }
+
+
+  highlightObjectOnHover(event: MouseEvent) {
+      if (this.objs.length === 0) return;
+
+      const { camera } = this.threeContext!;
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2(
+        (event.clientX / window.innerWidth) * 2 - 1,
+        -(event.clientY / window.innerHeight) * 2 + 1
+      );
+      raycaster.setFromCamera(mouse, camera);
+
+      const parentsToCheck = this.objs.map(o => o.obj.parent).filter(p => p instanceof THREE.Object3D) as THREE.Object3D[];
+      const intersects = raycaster.intersectObjects(parentsToCheck, true);
+
+      const highlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+
+      let foundHighlightable = false;
+      if (intersects.length > 0) {
+          const firstIntersected = intersects[0];
+          if (firstIntersected.object instanceof THREE.Mesh && !this.isSnapPoint(firstIntersected.object)) {
+               if (this.objHighlighted?.object !== firstIntersected.object) {
+                   this.resetHighlight();
+                   this.objHighlighted = firstIntersected;
+                   this.origMat = firstIntersected.object.material;
+                   firstIntersected.object.material = highlightMaterial;
+               }
+               foundHighlightable = true;
+           }
+      }
+
+      if (!foundHighlightable && this.objHighlighted) {
+          this.resetHighlight();
+      }
+  }
+
+  isSnapPoint(object: THREE.Object3D): boolean {
+      return this.snapObjs.some(snap => snap.obj === object);
+  }
+
+  resetHighlight() {
+    if (this.objHighlighted && this.origMat) {
+      const highlightedMesh = this.objHighlighted.object as THREE.Mesh;
+      if (highlightedMesh && highlightedMesh.material !== this.origMat) {
+         highlightedMesh.material = this.origMat;
+      }
+    }
     this.objHighlighted = null;
     this.origMat = null;
+  }
+
+  removeHighlightedObject() {
+    const objectToRemove = this.objHighlighted!.object;
+    let parentToRemove: THREE.Object3D | null = null;
+    let sceneObjIndex = -1;
+
+    for (let i = 0; i < this.objs.length; i++) {
+      const sceneObjParent = this.objs[i].obj.parent;
+      if (sceneObjParent && objectToRemove.parent === sceneObjParent) {
+          parentToRemove = sceneObjParent;
+          sceneObjIndex = i;
+          break;
+      }
+    }
+
+    if (parentToRemove && sceneObjIndex !== -1) {
+      const snapsToRemoveIndices: number[] = [];
+      this.snapObjs.forEach((snap, index) => {
+        if (snap.obj.parent === parentToRemove) {
+          snapsToRemoveIndices.push(index);
+        }
+      });
+      for (let i = snapsToRemoveIndices.length - 1; i >= 0; i--) {
+        const snapToRemove = this.snapObjs[snapsToRemoveIndices[i]];
+        this.snapObjs.splice(snapsToRemoveIndices[i], 1);
+      }
+
+      if (parentToRemove.parent === this.threeContext!.scene) {
+          this.threeContext!.scene.remove(parentToRemove);
+      } else {
+          console.warn("Could not remove object, parent not found directly in scene.");
+      }
+
+      this.objs.splice(sceneObjIndex, 1);
+
+      this.resetHighlight();
+
+    } else {
+      console.warn("Failed to find tracked object parent for removal.");
+      this.resetHighlight();
+    }
+  }
+
+
+  addObj(objType: ObjectType) {
+    if (!this.threeContext) return;
+
+    const popup = document.getElementById("geo-popup");
+    if (popup) popup.style.display = "none";
+    this.eIsDown = false;
+    if (!this.isPointerLocked) {
+        this.threeContext.pointerLockControls.lock();
+    }
+
+    if (this.selectedObject) {
+      this.removeSelectedObject(false);
+    }
+
+    const initialPos = new THREE.Vector3();
+    this.threeContext.camera.getWorldPosition(initialPos);
+    initialPos.addScaledVector(this.threeContext.camera.getWorldDirection(new THREE.Vector3()), 15);
+
+    const parentObj = objIns(initialPos, objType);
+    if (!parentObj || parentObj.children.length === 0) {
+      console.error("Failed to create object instance:", objType);
+      return;
+    }
+
+    const mainChild = parentObj.children[0];
+    if (!mainChild) {
+         console.error("Object instance created without a main child mesh:", objType);
+         return;
+    }
+
+    this.selectedObject = {
+      obj: mainChild,
+      objType: objType,
+    };
+
+    this.threeContext.scene.add(parentObj);
+
+    this.objToSnap = null;
+    this.inPlacementBounds = false;
     this.boundMat = null;
   }
 
+  placeSelectedObject() {
+    if (!this.selectedObject || !this.threeContext) return;
+
+    this.objs.push({
+      obj: this.selectedObject.obj,
+      objType: this.selectedObject.objType,
+    });
+
+    const newSnaps = addSnaps(this.selectedObject, this.state.isVisible);
+    this.snapObjs.push(...newSnaps);
+
+    this.selectedObject = null;
+    this.objToSnap = null;
+    this.inPlacementBounds = true;
+    this.boundMat = null;
+    this.threeContext.snapRadius.visible = false;
+  }
+
+  removeSelectedObject(createSnaps: boolean = false) {
+    if (!this.selectedObject || !this.threeContext) return;
+
+    if (this.selectedObject.obj.parent) {
+      this.threeContext.scene.remove(this.selectedObject.obj.parent);
+    }
+
+    this.selectedObject = null;
+    this.objToSnap = null;
+    this.inPlacementBounds = true;
+    this.boundMat = null;
+    if (this.threeContext?.snapRadius) this.threeContext.snapRadius.visible = false;
+  }
+
+
+  clearScene() {
+    if (!this.threeContext) return;
+
+    this.objs.forEach(sceneObj => {
+      if (sceneObj.obj.parent && sceneObj.obj.parent.parent === this.threeContext?.scene) {
+        this.threeContext?.scene.remove(sceneObj.obj.parent);
+      }
+    });
+
+    this.objs = [];
+    this.snapObjs = [];
+
+    if (this.selectedObject) {
+      this.removeSelectedObject(false);
+    }
+    this.resetHighlight();
+    this.setState({ isRemovalMode: false });
+    document.body.style.cursor = 'default';
+  }
+
+
   toggleInstructions() {
-    this.setState({ showInstructions: !this.state.showInstructions });
+    this.setState(prevState => ({ showInstructions: !prevState.showInstructions }));
   }
 
   toggleSnapPoints() {
-    const isVisible = !this.state.isVisible;
-    this.setState({ isVisible });
-
-    this.snapObjs.forEach((obj) => {
-      if (obj.obj) {
-        obj.obj.visible = isVisible;
-      }
+    const newVisibility = !this.state.isVisible;
+    this.setState({ isVisible: newVisibility });
+    this.snapObjs.forEach(snap => {
+      if (snap.obj) snap.obj.visible = newVisibility;
     });
   }
 
+
   render() {
     return (
-      <div style={{ position: 'fixed', width: '100%', height: '100%', overflow: 'hidden', marginLeft: '0px', marginTop:'0px' }}>
-        
-        <div
-          ref={(mount) => {
-            this.mount = mount;
-          }}
-          style={{ width: '100%', height: '100%' }}
+      <div style={rootStyle}>
+        <div ref={this.mountRef}
+          className="geobuild-canvas-container"
+          style={canvasContainerStyle}
         />
 
-        <div style={{
-          position: 'fixed',
-          top: '10px',
-          right: '10px',
-          backgroundColor: 'rgba(255, 255, 255, 0.8)',
-          padding: '10px',
-          borderRadius: '0px',
-          zIndex: 100
-        }}>
-          <div 
-            onClick={this.toggleInstructions}
-            style={{ cursor: 'pointer', marginBottom: '10px' }}
-          >
-            Instructions ↓
+        {this.state.isRemovalMode && (
+          <div style={removalIndicatorStyle}>
+            REMOVAL MODE (Click to Delete)
           </div>
+        )}
 
-          <div 
-            onClick={this.toggleSnapPoints}
-            style={{ cursor: 'pointer', marginBottom: '10px' }}
+        <div style={buttonContainerStyle} className="button-container">
+          <button onClick={this.toggleInstructions} style={buttonStyle} title="Show/Hide Help">
+            Help {this.state.showInstructions ? '▲' : '▼'}
+          </button>
+          <button onClick={this.toggleSnapPoints} style={buttonStyle} title="Show/Hide Placement Snap Points">
+            {this.state.isVisible ? 'Hide Snaps' : 'Show Snaps'}
+          </button>
+          <button
+            onClick={() => this.handleKeyDown({ code: 'KeyR' } as KeyboardEvent)}
+            style={{ ...buttonStyle, backgroundColor: this.state.isRemovalMode ? '#FFEB3B' : '#f8f8f8' }}
+            title="Toggle Removal Mode (R key)"
           >
-            {this.state.isVisible ? 'Hide' : 'Show'} snap points
-          </div>
-
-          <div 
-            onClick={this.clearScene}
-            style={{ 
-              cursor: 'pointer',
-              backgroundColor: '#FF5252',
-              color: 'white',
-              padding: '5px 10px',
-              textAlign: 'center',
-              borderRadius: '4px'
-            }}
-          >
-            Clear Scene
-          </div>
+            {this.state.isRemovalMode ? 'Exit Remove' : 'Remove Obj'}
+          </button>
+          <button onClick={this.clearScene} style={clearButtonStyle} title="Remove all objects">
+            Clear All
+          </button>
         </div>
 
         {this.state.showInstructions && (
-          <div style={{
-            position: 'fixed',
-            top: '50px',
-            right: '10px',
-            backgroundColor: 'white',
-            padding: '15px',
-            borderRadius: '5px',
-            width: '300px',
-            maxHeight: '400px',
-            overflowY: 'auto',
-            zIndex: 100,
-            boxShadow: '0px 0px 10px rgba(0,0,0,0.2)'
-          }}>
-            <h3 style={{ marginTop: 0 }}>Movement</h3>
-            <ul style={{ paddingLeft: '20px' }}>
-              <li>To move use WASD keys</li>
-              <li>Hold spacebar to move up</li>
-              <li>Hold X to move down</li>
-              <li>Look around with mouse</li>
+          <div style={instructionsPanelStyle}>
+            <h3 style={sectionHeaderStyle}>Movement</h3>
+            <ul style={listStyle}>
+              <li>Move: <code style={codeStyle}>W A S D</code></li>
+              <li>Up/Down: <code style={codeStyle}>Space</code> / <code style={codeStyle}>X</code></li>
+              <li>Look: Mouse (Click to Lock Cursor)</li>
+               <li>Exit Modes/Cancel: <code style={codeStyle}>Escape</code></li>
             </ul>
-
-            <h3>Building Objects</h3>
-            <ul style={{ paddingLeft: '20px' }}>
-              <li>Hold E to show object menu</li>
-              <li>Click on object name to add it to scene</li>
-              <li>After selecting object, it will move with your camera until placed</li>
-              <li>Click to place the object</li>
-              <li>Red objects cannot be placed - make sure they're in a valid position</li>
-              <li>Walls must snap to floors</li>
-              <li>Doors must snap to floors (same as walls)</li>
-              <li>Roofs can only snap to walls or doors</li>
-              <li>Selecting a new object will cancel placement of current object</li>
+             <h3 style={sectionHeaderStyle}>Building</h3>
+            <ul style={listStyle}>
+              <li>Open Menu: Press <code style={codeStyle}>E</code> (Cancels current placement)</li>
+              <li>Select Object: Click name in menu</li>
+              <li>Rotate Selected: Move mouse (while placing)</li>
+              <li>Place Object: Left Mouse Click</li>
+              <li>Cancel Placement: Right Mouse Click or <code style={codeStyle}>Esc</code></li>
+              <li><span style={{color:'red', fontWeight:'bold'}}>Red Object:</span> Invalid placement</li>
+               <li>Walls/Doors must snap to Floors</li>
+               <li>Roofs must snap to Walls/Doors</li>
             </ul>
-
-            <h3>Removing Objects</h3>
-            <ul style={{ paddingLeft: '20px' }}>
-              <li>Look at any object until it becomes wireframe</li>
-              <li>Press 'R' key to remove it</li>
+            <h3 style={sectionHeaderStyle}>Removing Objects</h3>
+            <ul style={listStyle}>
+                <li>Press <code style={codeStyle}>R</code> to enter/exit Removal Mode.</li>
+                <li>Mouse unlocks, cursor is a crosshair.</li>
+                <li>Hover over object to highlight (yellow).</li>
+                <li>Left Click highlighted object to remove.</li>
             </ul>
           </div>
         )}
 
-        <div 
-          id="geo-popup"
-          style={{
-            position: 'fixed',
-            height: 'auto',
-            width: '250px',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: 'white',
-            border: '1px solid black',
-            padding: '15px',
-            display: 'none',
-            zIndex: 100,
-            borderRadius: '8px',
-            boxShadow: '0px 0px 15px rgba(0,0,0,0.3)'
-          }}
-        >
-          <h3 style={{ textAlign: 'center', marginTop: 0 }}>Select an Object</h3>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            <li 
-              onClick={() => this.addObj("wall")}
-              style={{ 
-                cursor: 'pointer', 
-                padding: '10px',
-                marginBottom: '8px',
-                backgroundColor: '#f0f0f0',
-                borderRadius: '5px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: 'bold'
-              }}
-            >
-              <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                backgroundColor: '#0539CFF',
-                marginRight: '10px',
-                border: '1px solid black'
-              }}></div>
-              <span>Wall</span>
-            </li>
-            <li 
-              onClick={() => this.addObj("floor")}
-              style={{ 
-                cursor: 'pointer', 
-                padding: '10px',
-                marginBottom: '8px',
-                backgroundColor: '#f0f0f0',
-                borderRadius: '5px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: 'bold'
-              }}
-            >
-              <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                backgroundColor: '#EEA47F',
-                marginRight: '10px',
-                border: '1px solid black'
-              }}></div>
-              <span>Floor</span>
-            </li>
-            <li 
-              onClick={() => this.addObj("roof")}
-              style={{ 
-                cursor: 'pointer', 
-                padding: '10px',
-                marginBottom: '8px',
-                backgroundColor: '#f0f0f0',
-                borderRadius: '5px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: 'bold'
-              }}
-            >
-              <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                backgroundColor: '#317773',
-                marginRight: '10px',
-                border: '1px solid black'
-              }}></div>
-              <span>Roof</span>
-            </li>
-            <li 
-              onClick={() => this.addObj("door")}
-              style={{ 
-                cursor: 'pointer', 
-                padding: '10px',
-                backgroundColor: '#f0f0f0',
-                borderRadius: '5px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: 'bold'
-              }}
-            >
-              <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                backgroundColor: '#CC313D',
-                marginRight: '10px',
-                border: '1px solid black'
-              }}></div>
-              <span>Door</span>
-            </li>
+        <div id="geo-popup" style={popupStyle}>
+          <h3 style={popupHeaderStyle}>Select Object (Press E)</h3>
+          <ul style={popupListStyle}>
+            {objectMenuItems.map(item => (
+              <li
+                key={item.type}
+                onClick={() => this.addObj(item.type)}
+                style={popupItemStyle}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#e0e0e0')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f0f0f0')}
+              >
+                <div style={{ ...popupColorPreviewStyle, backgroundColor: item.color }}></div>
+                <span>{item.label}</span>
+              </li>
+            ))}
           </ul>
         </div>
       </div>
     );
   }
 }
+
+
+const objectColors = {
+  floor: '#EEA47F',
+  wall: '#5DADE2',
+  roof: '#AF601A',
+  door: '#CD6155'
+};
+
+const objectMenuItems: { label: string, type: ObjectType, color: string }[] = [
+    { label: 'Floor', type: 'floor', color: objectColors.floor },
+    { label: 'Wall', type: 'wall', color: objectColors.wall },
+    { label: 'Door', type: 'door', color: objectColors.door },
+    { label: 'Roof', type: 'roof', color: objectColors.roof },
+];
+
+
+const rootStyle: React.CSSProperties = {
+    position: 'fixed',
+    width: '100vw',
+    height: '100vh',
+    overflow: 'hidden',
+    margin: 0,
+    padding: 0,
+    top: 0,
+    left: 0,
+};
+
+const canvasContainerStyle: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    display: 'block',
+};
+
+const buttonContainerStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    padding: '8px',
+    borderRadius: '5px',
+    zIndex: 100,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+};
+
+const buttonStyle: React.CSSProperties = {
+  cursor: 'pointer',
+  padding: '6px 10px',
+  border: '1px solid #ccc',
+  backgroundColor: '#f8f8f8',
+  borderRadius: '4px',
+  fontSize: '13px',
+  textAlign: 'center',
+  minWidth: '90px',
+  transition: 'background-color 0.2s ease',
+};
+
+const clearButtonStyle: React.CSSProperties = {
+    ...buttonStyle,
+    backgroundColor: '#f44336',
+    color: 'white',
+    borderColor: '#d32f2f',
+};
+
+
+const instructionsPanelStyle: React.CSSProperties = {
+    position: 'absolute',
+    bottom: '0px',
+    right: '0px',
+    width: '280px',
+    maxHeight: 'calc(100vh - 20px)',
+    overflowY: 'auto',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    padding: '12px',
+    borderRadius: '5px',
+    zIndex: 99,
+    boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+    fontSize: '13px',
+    lineHeight: '1.4'
+};
+
+const sectionHeaderStyle: React.CSSProperties = {
+    marginTop: '10px',
+    marginBottom: '5px',
+    borderBottom: '1px solid #ddd',
+    paddingBottom: '4px',
+    fontSize: '14px',
+    fontWeight: '600',
+};
+
+const listStyle: React.CSSProperties = {
+    paddingLeft: '18px',
+    margin: '0 0 8px 0',
+    listStyleType: 'disc'
+};
+
+const codeStyle: React.CSSProperties = {
+    backgroundColor: '#eee',
+    padding: '1px 4px',
+    borderRadius: '3px',
+    fontFamily: 'monospace',
+    fontSize: '12px'
+};
+
+
+const popupStyle: React.CSSProperties = {
+    position: 'absolute',
+    height: 'auto',
+    width: '220px',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    border: '1px solid #bbb',
+    padding: '15px',
+    display: 'none',
+    zIndex: 101,
+    borderRadius: '6px',
+    boxShadow: '0px 4px 12px rgba(0,0,0,0.25)'
+};
+
+const popupHeaderStyle: React.CSSProperties = {
+    textAlign: 'center',
+    marginTop: 0,
+    marginBottom: '12px',
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#333'
+};
+
+const popupListStyle: React.CSSProperties = {
+    listStyle: 'none',
+    padding: 0,
+    margin: 0
+};
+
+
+const popupItemStyle: React.CSSProperties = {
+    cursor: 'pointer',
+    padding: '8px 10px',
+    marginBottom: '6px',
+    backgroundColor: '#f0f0f0',
+    borderRadius: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'background-color 0.2s ease',
+};
+
+const popupColorPreviewStyle: React.CSSProperties = {
+    width: '18px',
+    height: '18px',
+    marginRight: '10px',
+    border: '1px solid #777',
+    borderRadius: '3px',
+    flexShrink: 0
+};
+
+const removalIndicatorStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -100px)',
+    color: '#B71C1C',
+    backgroundColor: 'rgba(255, 235, 238, 0.9)',
+    padding: '6px 12px',
+    borderRadius: '4px',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    pointerEvents: 'none',
+    zIndex: 105,
+    border: '1px solid #EF9A9A'
+};
 
 export default GeoBuild;

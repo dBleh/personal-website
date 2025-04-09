@@ -1,10 +1,10 @@
-// components/Sidebar.tsx
 'use client';
 
 import Link from 'next/link';
 import React from 'react';
-import useMediaQuery from '../hooks/useMediaQuery'; // Adjust path
-import useIsMobile from '../hooks/usIsMobile';
+import useMediaQuery from '../hooks/useMediaQuery';
+import useIsMobile from '../hooks/useIsMobile';
+import '../styles/sidebar.css'; 
 interface SidebarProps {
   collapsed: boolean;
   setCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
