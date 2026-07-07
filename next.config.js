@@ -9,12 +9,6 @@ const nextConfig = {
       minSize: 20000,
       maxSize: 600000, // Keep chunks below 600KB
       cacheGroups: {
-        three: {
-          test: /[\\/]node_modules[\\/](three|@three)[\\/]/,
-          name: 'three-vendors',
-          priority: 10,
-          reuseExistingChunk: true,
-        },
         react: {
           test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
           name: 'react-vendors',
