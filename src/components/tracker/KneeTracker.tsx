@@ -126,7 +126,11 @@ export default function KneeTracker() {
       await loadOpenCV(); // warm the WASM up front so Track is instant
       setBusy(null);
       // draw first frame after layout settles
-      requestAnimationFrame(() => void showFrame(0, src, scale));
+      requestAnimationFrame(() => {
+        showFrame(0, src, scale).catch(() => {
+          /* a failed preview draw shouldn't crash the page */
+        });
+      });
     } catch (e) {
       setBusy(null);
       setError(e instanceof Error ? e.message : String(e));

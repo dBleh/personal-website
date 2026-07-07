@@ -4,21 +4,33 @@
 
 import { LK } from './constants';
 
-// OpenCV.js is loaded at runtime from a script URL. Self-host it under
-// /public/opencv/opencv.js for offline/reliability, or leave the CDN default.
-// Override via NEXT_PUBLIC_OPENCV_URL at build time.
+// OpenCV.js is loaded at runtime from a script URL. It is self-hosted under
+// /public/opencv/opencv.js so the app is fully offline-capable and no request
+// ever leaves the user's device (matching the app's privacy promise). The
+// pinned build embeds its WASM as a data: URI, so there is no separate .wasm
+// fetch. Override the location via NEXT_PUBLIC_OPENCV_URL at build time.
 const OPENCV_URL =
   (typeof process !== 'undefined' &&
     process.env &&
     process.env.NEXT_PUBLIC_OPENCV_URL) ||
-  'https://docs.opencv.org/4.x/opencv.js';
+  '/opencv/opencv.js';
+
+// Fail loudly instead of hanging the "Loading tracking engine…" spinner forever.
+const LOAD_TIMEOUT_MS = 60_000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CV = any;
 
 let cvPromise: Promise<CV> | null = null;
 
-/** Load (once) and return the OpenCV.js module. Safe to call repeatedly. */
+/**
+ * Load (once) and return the initialized OpenCV.js module. Safe to call
+ * repeatedly. Modern OpenCV.js (4.x) is a MODULARIZE build: `window.cv` is a
+ * *factory function* that must be invoked and awaited — it is not the ready
+ * module. Older builds expose the module directly (resolved, or via
+ * `onRuntimeInitialized`). This resolves every shape, and rejects (rather than
+ * throwing uncaught or hanging) on any failure so the UI can surface an error.
+ */
 export function loadOpenCV(): Promise<CV> {
   if (cvPromise) return cvPromise;
   cvPromise = new Promise<CV>((resolve, reject) => {
@@ -28,22 +40,61 @@ export function loadOpenCV(): Promise<CV> {
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
-    const ready = () => {
+
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const done = (mod: CV) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(mod);
+    };
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      cvPromise = null; // allow a later retry (e.g. the user re-uploads)
+      reject(err);
+    };
+    timer = setTimeout(
+      () =>
+        fail(
+          new Error(
+            'Timed out loading the tracking engine (OpenCV.js). Reload and try again.',
+          ),
+        ),
+      LOAD_TIMEOUT_MS,
+    );
+
+    // Turn whatever `window.cv` currently is into a ready module.
+    const initFromGlobal = () => {
       const cv = w.cv;
-      if (cv && typeof cv.then === 'function') {
-        // Some builds expose a Promise-like module.
-        cv.then((m: CV) => resolve(m)).catch(reject);
-      } else if (cv && cv.Mat) {
-        resolve(cv);
-      } else if (cv) {
-        cv['onRuntimeInitialized'] = () => resolve(cv);
-      } else {
-        reject(new Error('OpenCV loaded but cv object is missing'));
+      try {
+        if (typeof cv === 'function') {
+          // MODULARIZE factory: calling it returns a promise for the module.
+          Promise.resolve(cv())
+            .then((m: CV) => {
+              w.cv = m; // cache the initialized module for future callers
+              done(m);
+            })
+            .catch(fail);
+        } else if (cv && typeof cv.then === 'function') {
+          cv.then(done).catch(fail);
+        } else if (cv && cv.Mat) {
+          done(cv);
+        } else if (cv) {
+          cv.onRuntimeInitialized = () => done(cv);
+        } else {
+          fail(new Error('OpenCV script loaded but the cv object is missing.'));
+        }
+      } catch (e) {
+        fail(e instanceof Error ? e : new Error(String(e)));
       }
     };
 
-    if (w.cv && w.cv.Mat) {
-      resolve(w.cv);
+    // Already loaded by a previous call.
+    if (w.cv) {
+      initFromGlobal();
       return;
     }
 
@@ -51,11 +102,11 @@ export function loadOpenCV(): Promise<CV> {
       'opencv-js',
     ) as HTMLScriptElement | null;
     if (existing) {
-      if (w.cv) ready();
-      else existing.addEventListener('load', ready);
+      existing.addEventListener('load', initFromGlobal);
       existing.addEventListener('error', () =>
-        reject(new Error('Failed to load OpenCV.js')),
+        fail(new Error('Failed to load OpenCV.js.')),
       );
+      if (w.cv) initFromGlobal();
       return;
     }
 
@@ -63,13 +114,13 @@ export function loadOpenCV(): Promise<CV> {
     script.id = 'opencv-js';
     script.src = OPENCV_URL;
     script.async = true;
-    script.onload = ready;
+    script.onload = initFromGlobal;
     script.onerror = () =>
-      reject(
+      fail(
         new Error(
-          'Could not load OpenCV.js from ' +
+          'Could not load the tracking engine (OpenCV.js) from ' +
             OPENCV_URL +
-            '. Check your connection or self-host it under /public/opencv/.',
+            '.',
         ),
       );
     document.body.appendChild(script);
