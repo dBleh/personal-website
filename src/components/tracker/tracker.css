@@ -1,0 +1,294 @@
+.kt-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem 1rem;
+  color: #1f2937;
+}
+
+.kt-header h1 {
+  font-size: 1.9rem;
+  font-weight: 800;
+  color: #1f2937;
+  margin: 0 0 0.25rem 0;
+}
+.kt-header p {
+  color: #4b5563;
+  margin: 0 0 0.25rem 0;
+  line-height: 1.6;
+}
+.kt-privacy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 9999px;
+  padding: 0.2rem 0.7rem;
+  margin-top: 0.4rem;
+}
+
+.kt-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  margin-top: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .kt-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kt-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.kt-card h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.kt-stage {
+  position: relative;
+  background: #14110f;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 240px;
+}
+.kt-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.kt-drop {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: #6b7280;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.kt-drop:hover,
+.kt-drop.drag {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.kt-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+.kt-btn {
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  background: #2563eb;
+  color: #fff;
+  transition: background 0.15s, opacity 0.15s;
+}
+.kt-btn:hover {
+  background: #1d4ed8;
+}
+.kt-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.kt-btn-ghost {
+  background: #fff;
+  color: #374151;
+  border-color: #d1d5db;
+}
+.kt-btn-ghost:hover {
+  background: #f3f4f6;
+}
+.kt-btn-warn {
+  background: #dc2626;
+}
+.kt-btn-warn:hover {
+  background: #b91c1c;
+}
+.kt-btn-ok {
+  background: #059669;
+}
+.kt-btn-ok:hover {
+  background: #047857;
+}
+.kt-btn-sm {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.kt-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+  display: block;
+  margin-bottom: 0.2rem;
+}
+.kt-input,
+.kt-select {
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+}
+.kt-field {
+  margin-bottom: 0.75rem;
+}
+
+.kt-scrub {
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.kt-progress {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 9999px;
+  overflow: hidden;
+  margin: 0.5rem 0;
+}
+.kt-progress > div {
+  height: 100%;
+  background: #2563eb;
+  transition: width 0.1s linear;
+}
+
+.kt-readout {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  color: #374151;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  padding: 0.4rem 0.6rem;
+}
+
+.kt-sessions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.kt-session {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  background: #fff;
+}
+.kt-session.sel {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+.kt-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.kt-session-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  font-weight: 600;
+}
+.kt-session-meta {
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.kt-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+}
+.kt-hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+.kt-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 12, 10, 0.72);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
+  padding: 1.5rem;
+}
+.kt-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: kt-spin 0.8s linear infinite;
+}
+@keyframes kt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.kt-seg {
+  display: inline-flex;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.kt-seg button {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.7rem;
+  border: none;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+}
+.kt-seg button.on {
+  background: #2563eb;
+  color: #fff;
+}

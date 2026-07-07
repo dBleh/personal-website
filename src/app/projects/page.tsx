@@ -1,17 +1,9 @@
 'use client';
 
 import React from 'react';
-import ProjectCard from "../../components/ProjectCard"; 
-import useMediaQuery from '../../hooks/useMediaQuery'; 
+import ProjectCard from "../../components/ProjectCard";
 
 export default function Projects() {
-
-  const isMobile = useMediaQuery('(max-width: 768px)');
-
-  const handleGeoBuildNotice = (e: React.MouseEvent) => {
-    e.preventDefault(); 
-    alert('GeoBuild is optimized for desktop use. Please view on a larger screen for the best experience.');
-  };
 
   return (
     
@@ -56,21 +48,6 @@ export default function Projects() {
           
           imageUrl="/images/cuboid.png" 
           githubUrl="https://github.com/dBleh/CubeGame"
-        />
-
-        <ProjectCard
-          title="GeoBuild - 3D Web Construction Tool"
-          description="Created a web-based 3D construction interface using Three.js and React. Allows users to intuitively place, manipulate, and snap virtual objects within a 3D environment. Features include placement validation logic and a user-friendly interface designed for building virtual structures directly in the browser."
-          technologies={["Three.js", "React.js", "JavaScript", "HTML/CSS"]}
-          
-          imageUrl="/images/geobuild.png"
-          
-          {...(isMobile
-             
-              ? { onCardClickOverride: handleGeoBuildNotice, actionTextOverride: "Desktop Recommended" } 
-             
-              : { localUrl: "/geobuild" } 
-          )}
         />
       </div>
     </div>
