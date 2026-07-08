@@ -1,9 +1,10 @@
-// Ported from kneetracker/analysis.py: deviation, descriptive stats, and CSV
-// read/write in the exact desktop format (so exports interoperate with the
-// Python `--compare` and re-import).
+// Series statistics and CSV read/write for the motion tracker. Sessions carry
+// a value series (angle or deviation) computed from tracked landmark
+// positions; see measures.ts for how positions become values.
 
-import { DEFAULT_FPS, SEC_TAG, VIEW_INFO, VIEWS, ViewKey } from './constants';
-import type { Session, StudyInfo, TrackRecord, Unit } from './types';
+import { DEFAULT_FPS } from './constants';
+import { getMeasure, measureValue } from './measures';
+import type { FrameRecord, Session, Unit } from './types';
 
 export interface SeriesStats {
   n: number;
@@ -18,7 +19,7 @@ export interface SeriesStats {
   peakT: number;
 }
 
-/** Full descriptive stats for one 1-D deviation series. Port of _series_stats. */
+/** Full descriptive stats for one 1-D series. */
 export function seriesStats(d: number[], t: number[]): SeriesStats {
   const n = d.length;
   if (n === 0) {
@@ -56,7 +57,7 @@ export function seriesStats(d: number[], t: number[]): SeriesStats {
   const mean = sum / n;
   let varSum = 0;
   for (let i = 0; i < n; i++) varSum += (d[i] - mean) * (d[i] - mean);
-  const std = Math.sqrt(varSum / n); // population std (ddof=0), matches numpy
+  const std = Math.sqrt(varSum / n); // population std (ddof=0)
   const rms = Math.sqrt(sumSq / n);
   return {
     n,
@@ -72,107 +73,22 @@ export function seriesStats(d: number[], t: number[]): SeriesStats {
   };
 }
 
-/** reference xy + Nx2 deviations. Port of compute_deviation. */
-export function computeDeviation(
-  records: TrackRecord[],
-  referenceMode: 'first' | 'mean' = 'first',
-): { ref: [number, number]; dev: [number, number][] } {
-  let refX: number;
-  let refY: number;
-  if (referenceMode === 'mean') {
-    let sx = 0;
-    let sy = 0;
-    for (const r of records) {
-      sx += r.x;
-      sy += r.y;
-    }
-    refX = sx / records.length;
-    refY = sy / records.length;
-  } else {
-    refX = records[0].x;
-    refY = records[0].y;
-  }
-  const dev = records.map(
-    (r) => [r.x - refX, r.y - refY] as [number, number],
-  );
-  return { ref: [refX, refY], dev };
-}
-
-/** Summary stats of a session's primary (horizontal) axis, in its unit. */
-export function sessionPrimaryStats(s: Session) {
-  const d = s.dev.map((p) => p[0]);
-  const st = seriesStats(d, s.t);
-  return {
-    n: st.n,
-    dur: s.t.length > 1 ? s.t[s.t.length - 1] - s.t[0] : 0,
-    mean: st.mean,
-    range: st.range,
-    std: st.std,
-    rms: st.rms,
-    peak: st.peak,
-  };
-}
-
-export function primaryLabel(view: ViewKey): string {
-  return (VIEW_INFO[view] ?? VIEW_INFO.anterior).primary;
-}
-
-/** Stats for both axes of a session, with their anatomical tags. */
-export function sessionAxisStats(s: Session): {
+/** Stats for a session's series, plus labels from its measure. */
+export function sessionStats(s: Session): {
   primary: SeriesStats;
-  secondary: SeriesStats;
-  primaryTag: string;
-  secondaryTag: string;
+  secondary: SeriesStats | null;
+  primaryLabel: string;
+  secondaryLabel: string;
   duration: number;
 } {
-  const info = VIEW_INFO[s.view] ?? VIEW_INFO.anterior;
+  const def = getMeasure(s.measure);
   return {
-    primary: seriesStats(s.dev.map((p) => p[0]), s.t),
-    secondary: seriesStats(s.dev.map((p) => p[1]), s.t),
-    primaryTag: info.primary,
-    secondaryTag: SEC_TAG[info.plane] ?? 'Y',
+    primary: seriesStats(s.values, s.t),
+    secondary: s.values2 ? seriesStats(s.values2, s.t) : null,
+    primaryLabel: def.valueLabel,
+    secondaryLabel: def.value2Label ?? 'Secondary',
     duration: s.t.length > 1 ? s.t[s.t.length - 1] - s.t[0] : 0,
   };
-}
-
-// --- CSV ---------------------------------------------------------------------
-
-/**
- * Build a session from live tracking output, applying the mm scale. Port of
- * Session.from_tracking.
- */
-export function sessionFromTracking(
-  name: string,
-  view: ViewKey,
-  unit: Unit,
-  pxPerMm: number | null,
-  records: TrackRecord[],
-  devPx: [number, number][],
-  fps: number,
-  calibNote = '',
-  date?: string,
-): Session {
-  const scale = pxPerMm && unit === 'mm' ? 1.0 / pxPerMm : 1.0;
-  const f0 = records[0].frame;
-  const t = records.map((r) => (fps ? (r.frame - f0) / fps : r.frame - f0));
-  const dev = devPx.map(
-    (p) => [p[0] * scale, p[1] * scale] as [number, number],
-  );
-  return {
-    id: cryptoId(),
-    name,
-    view,
-    unit,
-    t,
-    dev,
-    source: 'tracked',
-    calibNote,
-    date: date || todayIso(),
-  };
-}
-
-export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function cryptoId(): string {
@@ -186,76 +102,152 @@ function cryptoId(): string {
 }
 
 /**
- * Serialise a session to the desktop CSV format. Positions are re-derived from
- * deviations here only for tracked sessions that keep raw px; to keep it simple
- * and lossless we write frame/time/deviation columns. Port of write_csv shape.
+ * Turn tracked frame records into a session by running the measure's recipe
+ * over every frame. Angles are unitless in mm terms (always degrees); point
+ * measures report px, or mm when a two-point calibration was applied.
  */
-export function sessionToCsv(
-  s: Session,
-  records: TrackRecord[] | null,
+export function sessionFromTracking(
+  name: string,
+  measureKey: string,
+  records: FrameRecord[],
   fps: number,
-): string {
-  const sagittal = (VIEW_INFO[s.view]?.plane ?? '') === 'sagittal';
-  const hx = `deviation_x_${s.unit}`;
-  const hy = `deviation_y_${s.unit}`;
-  const hap = `ap_deviation_${s.unit}`;
-  const meta = [`# knee_tracker`, `view=${s.view}`, `unit=${s.unit}`];
-  if (s.date) meta.push(`date=${s.date}`);
-  if (s.calibNote) meta.push(`calib=${s.calibNote}`);
-  const lines: string[] = [];
-  lines.push(meta.join(','));
-  lines.push(['frame', 'time_s', 'x_px', 'y_px', hx, hy, hap].join(','));
+  pxPerMm: number | null,
+  calibNote = '',
+): Session {
+  const def = getMeasure(measureKey);
+  const f0 = records[0].frame;
+  const t = records.map((r) => (fps ? (r.frame - f0) / fps : r.frame - f0));
 
-  for (let i = 0; i < s.dev.length; i++) {
-    const [dx, dy] = s.dev[i];
+  let unit: Unit;
+  let values: number[];
+  let values2: number[] | undefined;
+  if (def.kind === 'point') {
+    const scale = pxPerMm ? 1 / pxPerMm : 1;
+    unit = pxPerMm ? 'mm' : 'px';
+    const x0 = records[0].pts[0].x;
+    const y0 = records[0].pts[0].y;
+    values = records.map((r) => (r.pts[0].x - x0) * scale);
+    values2 = records.map((r) => (r.pts[0].y - y0) * scale);
+  } else {
+    unit = 'deg';
+    values = records.map((r) => measureValue(def, r.pts));
+  }
+
+  return {
+    id: cryptoId(),
+    name,
+    measure: def.key,
+    unit,
+    t,
+    values,
+    values2,
+    source: 'tracked',
+    calibNote,
+  };
+}
+
+// --- CSV ---------------------------------------------------------------------
+
+/**
+ * Serialise a session. When the raw frame records are available (tracked this
+ * visit) the landmark positions are written too, so the file is a complete
+ * data-collection record; imported/restored sessions write the series only.
+ */
+export function sessionToCsv(s: Session, records: FrameRecord[] | null): string {
+  const def = getMeasure(s.measure);
+  const meta = [`# motion_tracker`, `measure=${s.measure}`, `unit=${s.unit}`];
+  if (s.calibNote) meta.push(`calib=${s.calibNote}`);
+
+  const ptCols = def.points.flatMap((p) => [`${p.id}_x`, `${p.id}_y`]);
+  const header = ['frame', 'time_s', ...ptCols, `value_${s.unit}`];
+  if (s.values2) header.push(`value2_${s.unit}`);
+
+  const lines = [meta.join(','), header.join(',')];
+  for (let i = 0; i < s.values.length; i++) {
     const rec = records ? records[i] : null;
-    const frame = rec ? rec.frame : i;
-    // Only trust `fps` when we have real frame indices; a session restored
-    // from storage/CSV keeps its own timeline.
-    const t = rec && fps ? frame / fps : s.t[i];
-    const x = rec ? rec.x : 0;
-    const y = rec ? rec.y : 0;
-    const ap = sagittal ? dx.toFixed(4) : '';
-    lines.push(
-      [
-        String(frame),
-        t.toFixed(4),
-        x.toFixed(3),
-        y.toFixed(3),
-        dx.toFixed(4),
-        dy.toFixed(4),
-        ap,
-      ].join(','),
-    );
+    const cols = [String(rec ? rec.frame : i), s.t[i].toFixed(4)];
+    for (let p = 0; p < def.points.length; p++) {
+      const pt = rec?.pts[p];
+      cols.push(pt ? pt.x.toFixed(3) : '', pt ? pt.y.toFixed(3) : '');
+    }
+    cols.push(s.values[i].toFixed(4));
+    if (s.values2) cols.push(s.values2[i].toFixed(4));
+    lines.push(cols.join(','));
   }
   return lines.join('\n') + '\n';
 }
 
 /**
- * Read back a knee_tracker deviation CSV. Port of read_deviation_csv.
- * `fallbackDate` (e.g. the file's modified date) is used when the CSV predates
- * the `date=` meta field, so multi-day imports still land on a timeline.
+ * Read back a motion_tracker CSV. Legacy knee_tracker deviation CSVs (from the
+ * previous web version and the Python desktop app) import as single-point
+ * sessions, so old data still loads.
  */
-export function sessionFromCsv(
-  text: string,
-  filename: string,
-  fallbackDate?: string,
-): Session {
+export function sessionFromCsv(text: string, filename: string): Session {
   const rows = text
     .split(/\r?\n/)
     .filter((l) => l.trim().length > 0)
     .map((l) => l.split(',').map((c) => c.trim()));
   if (rows.length === 0) throw new Error('Empty CSV');
+  const name = filename.replace(/\.[^.]+$/, '');
+
+  // Legacy format: "# knee_tracker" meta + deviation_x_/deviation_y_ columns.
+  if (rows[0][0].startsWith('# knee_tracker') || rows[0][0] === 'frame') {
+    return legacyFromCsv(rows, name);
+  }
 
   let idx = 0;
-  let viewMeta: string | null = null;
+  let measure = 'point';
   let calibNote = '';
-  let dateMeta = '';
   if (rows[0][0].startsWith('#')) {
     for (const tok of rows[0]) {
-      if (tok.startsWith('view=')) viewMeta = tok.slice(5);
+      if (tok.startsWith('measure=')) measure = tok.slice(8);
       else if (tok.startsWith('calib=')) calibNote = tok.slice(6);
-      else if (tok.startsWith('date=')) dateMeta = tok.slice(5);
+    }
+    idx = 1;
+  }
+  const header = rows[idx];
+  idx++;
+  const valueCol = header.findIndex((h) => h.startsWith('value_'));
+  if (!header || header[0] !== 'frame' || valueCol < 0) {
+    throw new Error(`Not a motion_tracker CSV: ${filename}`);
+  }
+  const unit = (header[valueCol].split('_').pop() ?? 'px') as Unit;
+  const value2Col = header.findIndex((h) => h.startsWith('value2_'));
+
+  const t: number[] = [];
+  const values: number[] = [];
+  const values2: number[] = [];
+  for (; idx < rows.length; idx++) {
+    const row = rows[idx];
+    if (row.length <= valueCol) continue;
+    const frame = parseFloat(row[0]);
+    t.push(row[1] ? parseFloat(row[1]) : frame / DEFAULT_FPS);
+    values.push(parseFloat(row[valueCol]));
+    if (value2Col >= 0) values2.push(parseFloat(row[value2Col]));
+  }
+  if (values.length < 2)
+    throw new Error(`CSV has fewer than 2 samples: ${filename}`);
+
+  const t0 = t[0];
+  return {
+    id: cryptoId(),
+    name,
+    measure: getMeasure(measure).key,
+    unit,
+    t: t.map((v) => v - t0),
+    values,
+    values2: value2Col >= 0 ? values2 : undefined,
+    source: 'csv',
+    calibNote,
+  };
+}
+
+function legacyFromCsv(rows: string[][], name: string): Session {
+  let idx = 0;
+  let calibNote = '';
+  if (rows[0][0].startsWith('#')) {
+    for (const tok of rows[0]) {
+      if (tok.startsWith('calib=')) calibNote = tok.slice(6);
     }
     idx = 1;
   }
@@ -264,142 +256,84 @@ export function sessionFromCsv(
   if (
     !header ||
     header[0] !== 'frame' ||
-    header.length < 7 ||
+    header.length < 6 ||
     !header[4].startsWith('deviation_x_')
   ) {
-    throw new Error(`Not a knee_tracker deviation CSV: ${filename}`);
+    throw new Error(`Not a recognised tracker CSV: ${name}`);
   }
-  const unit = header[4].split('_').pop() as Unit;
-
+  const unit = (header[4].split('_').pop() ?? 'px') as Unit;
   const t: number[] = [];
-  const dev: [number, number][] = [];
-  let apSeen = false;
+  const values: number[] = [];
+  const values2: number[] = [];
   for (; idx < rows.length; idx++) {
     const row = rows[idx];
-    if (row.length < 7) continue;
+    if (row.length < 6) continue;
     const frame = parseFloat(row[0]);
     t.push(row[1] ? parseFloat(row[1]) : frame / DEFAULT_FPS);
-    dev.push([parseFloat(row[4]), parseFloat(row[5])]);
-    if (row[6] && row[6].length) apSeen = true;
+    values.push(parseFloat(row[4]));
+    values2.push(parseFloat(row[5]));
   }
-  if (dev.length < 2)
-    throw new Error(`CSV has fewer than 2 samples: ${filename}`);
-
+  if (values.length < 2) throw new Error(`CSV has fewer than 2 samples: ${name}`);
   const t0 = t[0];
-  const tZeroed = t.map((v) => v - t0);
-  let view: ViewKey;
-  if (viewMeta && (VIEW_INFO as Record<string, unknown>)[viewMeta]) {
-    view = viewMeta as ViewKey;
-  } else {
-    view = apSeen ? 'medial' : 'anterior';
-  }
-  const name = filename.replace(/\.[^.]+$/, '');
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateMeta)
-    ? dateMeta
-    : fallbackDate || todayIso();
   return {
     id: cryptoId(),
     name,
-    view,
+    measure: 'point',
     unit,
-    t: tZeroed,
-    dev,
+    t: t.map((v) => v - t0),
+    values,
+    values2,
     source: 'csv',
     calibNote,
-    date,
   };
 }
 
 /**
- * One-row-per-session summary CSV for case studies: study metadata plus the
- * full metric set for both axes, ready to drop into a spreadsheet and
- * aggregate across visits.
+ * One-row-per-session summary: the full metric set for every session, ready
+ * for a spreadsheet. Pure data collection — no metadata beyond the session
+ * name and measure.
  */
-export function sessionsToSummaryCsv(
-  sessions: Session[],
-  study: StudyInfo,
-): string {
+export function sessionsToSummaryCsv(sessions: Session[]): string {
   const esc = (v: string) =>
     /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
   const header = [
-    'client',
-    'assessment_date',
-    'assessor',
-    'movement',
-    'side',
     'session',
-    'session_date',
-    'view',
-    'plane',
-    'landmark',
+    'measure',
     'unit',
     'calibration',
     'frames',
     'duration_s',
-    'primary_axis',
-    'primary_mean',
-    'primary_min',
-    'primary_max',
-    'primary_range',
-    'primary_std',
-    'primary_rms',
-    'primary_peak',
-    'primary_peak_time_s',
-    'secondary_axis',
-    'secondary_mean',
-    'secondary_min',
-    'secondary_max',
-    'secondary_range',
-    'secondary_std',
-    'secondary_rms',
-    'secondary_peak',
-    'secondary_peak_time_s',
-    'notes',
+    'mean',
+    'min',
+    'max',
+    'range',
+    'std',
+    'rms',
+    'peak_abs',
+    'peak_time_s',
   ];
   const lines = [header.join(',')];
   for (const s of sessions) {
-    const info = VIEW_INFO[s.view] ?? VIEW_INFO.anterior;
-    const ax = sessionAxisStats(s);
+    const st = sessionStats(s);
     const num = (v: number) => v.toFixed(3);
     lines.push(
       [
-        esc(study.client),
-        esc(study.date),
-        esc(study.assessor),
-        esc(study.movement),
-        study.side,
         esc(s.name),
-        s.date,
-        s.view,
-        info.plane,
-        esc(info.landmark),
+        s.measure,
         s.unit,
-        esc(s.calibNote || 'none (pixel units)'),
-        String(ax.primary.n),
-        ax.duration.toFixed(3),
-        ax.primaryTag,
-        num(ax.primary.mean),
-        num(ax.primary.min),
-        num(ax.primary.max),
-        num(ax.primary.range),
-        num(ax.primary.std),
-        num(ax.primary.rms),
-        num(ax.primary.peak),
-        ax.primary.peakT.toFixed(3),
-        ax.secondaryTag,
-        num(ax.secondary.mean),
-        num(ax.secondary.min),
-        num(ax.secondary.max),
-        num(ax.secondary.range),
-        num(ax.secondary.std),
-        num(ax.secondary.rms),
-        num(ax.secondary.peak),
-        ax.secondary.peakT.toFixed(3),
-        esc(study.notes),
+        esc(s.calibNote || 'none'),
+        String(st.primary.n),
+        st.duration.toFixed(3),
+        num(st.primary.mean),
+        num(st.primary.min),
+        num(st.primary.max),
+        num(st.primary.range),
+        num(st.primary.std),
+        num(st.primary.rms),
+        num(st.primary.peak),
+        st.primary.peakT.toFixed(3),
       ].join(','),
     );
   }
   return lines.join('\n') + '\n';
 }
-
-export { VIEWS };

@@ -1,16 +1,17 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 
-import { sessionAxisStats } from '../../lib/tracker/analysis';
-import { VIEW_INFO } from '../../lib/tracker/constants';
+import { sessionStats } from '../../lib/tracker/analysis';
+import { getMeasure } from '../../lib/tracker/measures';
 import type { Session } from '../../lib/tracker/types';
-import DeviationChart from './DeviationChart';
+import SessionChart from './SessionChart';
 
 const MAX_TABLE_ROWS = 1500;
 
 /**
- * Results panel for one session: headline stat tiles, an interactive chart or
- * a full data table (tabbed), and the per-axis statistics as real HTML.
+ * Results panel for one session: headline stat tiles (ROM-first for angle
+ * measures), an interactive chart or a full data table (tabbed), and the
+ * per-series statistics as real HTML.
  */
 export default function SessionDetail({
   session,
@@ -20,48 +21,75 @@ export default function SessionDetail({
   onExportCsv: () => void;
 }) {
   const [tab, setTab] = useState<'chart' | 'table'>('chart');
-  const info = VIEW_INFO[session.view] ?? VIEW_INFO.anterior;
-  const ax = useMemo(() => sessionAxisStats(session), [session]);
+  const def = getMeasure(session.measure);
+  const st = useMemo(() => sessionStats(session), [session]);
   const unit = session.unit;
+  const isAngle = unit === 'deg';
 
-  const tiles: { label: string; value: string; sub: string }[] = [
-    {
-      label: `Peak deviation (${ax.primaryTag})`,
-      value: `${ax.primary.peakSigned >= 0 ? '+' : ''}${ax.primary.peakSigned.toFixed(1)} ${unit}`,
-      sub: `at ${ax.primary.peakT.toFixed(2)} s`,
-    },
-    {
-      label: `Range (${ax.primaryTag})`,
-      value: `${ax.primary.range.toFixed(1)} ${unit}`,
-      sub: `${ax.primary.min.toFixed(1)} to ${ax.primary.max.toFixed(1)}`,
-    },
-    {
-      label: `RMS (${ax.primaryTag})`,
-      value: `${ax.primary.rms.toFixed(2)} ${unit}`,
-      sub: 'overall movement magnitude',
-    },
-    {
-      label: `Std dev (${ax.primaryTag})`,
-      value: `${ax.primary.std.toFixed(2)} ${unit}`,
-      sub: 'spread around the mean',
-    },
-  ];
+  const tiles: { label: string; value: string; sub: string }[] = isAngle
+    ? [
+        {
+          label: 'Range of motion',
+          value: `${st.primary.range.toFixed(1)} ${unit}`,
+          sub: `${st.primary.min.toFixed(1)} to ${st.primary.max.toFixed(1)}`,
+        },
+        {
+          label: 'Min angle',
+          value: `${st.primary.min.toFixed(1)} ${unit}`,
+          sub: 'smallest angle reached',
+        },
+        {
+          label: 'Max angle',
+          value: `${st.primary.max.toFixed(1)} ${unit}`,
+          sub: 'largest angle reached',
+        },
+        {
+          label: 'Mean angle',
+          value: `${st.primary.mean.toFixed(1)} ${unit}`,
+          sub: 'average over the clip',
+        },
+      ]
+    : [
+        {
+          label: `Peak ${def.valueLabel.toLowerCase()}`,
+          value: `${st.primary.peakSigned >= 0 ? '+' : ''}${st.primary.peakSigned.toFixed(1)} ${unit}`,
+          sub: `at ${st.primary.peakT.toFixed(2)} s`,
+        },
+        {
+          label: 'Range',
+          value: `${st.primary.range.toFixed(1)} ${unit}`,
+          sub: `${st.primary.min.toFixed(1)} to ${st.primary.max.toFixed(1)}`,
+        },
+        {
+          label: 'RMS',
+          value: `${st.primary.rms.toFixed(2)} ${unit}`,
+          sub: 'overall movement magnitude',
+        },
+        {
+          label: 'Std dev',
+          value: `${st.primary.std.toFixed(2)} ${unit}`,
+          sub: 'spread around the mean',
+        },
+      ];
 
   // Decimate very long clips so the table stays responsive; full resolution
   // is always available in the CSV export.
   const step = Math.max(1, Math.ceil(session.t.length / MAX_TABLE_ROWS));
   const tableRows = useMemo(() => {
-    const rows: { i: number; t: number; p: number; s: number }[] = [];
+    const rows: { i: number; t: number; p: number; s: number | null }[] = [];
     for (let i = 0; i < session.t.length; i += step) {
       rows.push({
         i,
         t: session.t[i],
-        p: session.dev[i][0],
-        s: session.dev[i][1],
+        p: session.values[i],
+        s: session.values2 ? session.values2[i] : null,
       });
     }
     return rows;
   }, [session, step]);
+
+  const statRows: [string, typeof st.primary][] = [[def.valueLabel, st.primary]];
+  if (st.secondary) statRows.push([st.secondaryLabel, st.secondary]);
 
   return (
     <div>
@@ -69,9 +97,7 @@ export default function SessionDetail({
         <div>
           <h3 className="kt-detail-title">{session.name}</h3>
           <div className="kt-hint">
-            {cap(session.view)} view ({info.plane} plane) · landmark: {info.landmark} ·{' '}
-            {ax.primary.n} frames · {ax.duration.toFixed(2)} s ·{' '}
-            {unit === 'mm' ? 'mm (calibrated)' : 'px (uncalibrated)'}
+            {def.label} · {st.primary.n} frames · {st.duration.toFixed(2)} s · {unit}
             {session.calibNote ? ` · ${session.calibNote}` : ''}
           </div>
         </div>
@@ -106,7 +132,7 @@ export default function SessionDetail({
       </div>
 
       {tab === 'chart' ? (
-        <DeviationChart session={session} />
+        <SessionChart session={session} />
       ) : (
         <div className="kt-tablewrap tall">
           {step > 1 && (
@@ -121,11 +147,13 @@ export default function SessionDetail({
                 <th className="num">#</th>
                 <th className="num">Time (s)</th>
                 <th className="num">
-                  {ax.primaryTag} ({unit})
+                  {def.valueLabel} ({unit})
                 </th>
-                <th className="num">
-                  {ax.secondaryTag} ({unit})
-                </th>
+                {session.values2 && (
+                  <th className="num">
+                    {st.secondaryLabel} ({unit})
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -137,10 +165,12 @@ export default function SessionDetail({
                     {r.p >= 0 ? '+' : ''}
                     {r.p.toFixed(3)}
                   </td>
-                  <td className="num">
-                    {r.s >= 0 ? '+' : ''}
-                    {r.s.toFixed(3)}
-                  </td>
+                  {r.s != null && (
+                    <td className="num">
+                      {r.s >= 0 ? '+' : ''}
+                      {r.s.toFixed(3)}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -148,39 +178,34 @@ export default function SessionDetail({
         </div>
       )}
 
-      <h4 className="kt-subhead">Per-axis statistics ({unit})</h4>
+      <h4 className="kt-subhead">Statistics ({unit})</h4>
       <div className="kt-tablewrap">
         <table className="kt-table">
           <thead>
             <tr>
-              <th>Axis</th>
+              <th>Series</th>
               <th className="num">Mean</th>
               <th className="num">Min</th>
               <th className="num">Max</th>
               <th className="num">Range</th>
               <th className="num">Std</th>
               <th className="num">RMS</th>
-              <th className="num">Peak |dev|</th>
+              <th className="num">Peak |v|</th>
               <th className="num">Peak t (s)</th>
             </tr>
           </thead>
           <tbody>
-            {(
-              [
-                [`${ax.primaryTag} — ${info.hLabel}`, ax.primary, true],
-                [`${ax.secondaryTag} — ${info.vLabel}`, ax.secondary, false],
-              ] as const
-            ).map(([label, st, primary]) => (
-              <tr key={label} className={primary ? 'primary' : ''}>
+            {statRows.map(([label, s], i) => (
+              <tr key={label} className={i === 0 ? 'primary' : ''}>
                 <td>{label}</td>
-                <td className="num">{signed(st.mean)}</td>
-                <td className="num">{signed(st.min)}</td>
-                <td className="num">{signed(st.max)}</td>
-                <td className="num">{st.range.toFixed(2)}</td>
-                <td className="num">{st.std.toFixed(2)}</td>
-                <td className="num">{st.rms.toFixed(2)}</td>
-                <td className="num">{st.peak.toFixed(2)}</td>
-                <td className="num">{st.peakT.toFixed(2)}</td>
+                <td className="num">{signed(s.mean)}</td>
+                <td className="num">{signed(s.min)}</td>
+                <td className="num">{signed(s.max)}</td>
+                <td className="num">{s.range.toFixed(2)}</td>
+                <td className="num">{s.std.toFixed(2)}</td>
+                <td className="num">{s.rms.toFixed(2)}</td>
+                <td className="num">{s.peak.toFixed(2)}</td>
+                <td className="num">{s.peakT.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
@@ -190,46 +215,36 @@ export default function SessionDetail({
       <details className="kt-glossary">
         <summary>What these numbers mean</summary>
         <dl>
-          <dt>Deviation</dt>
-          <dd>
-            How far the landmark has moved from its reference position (the first tracked frame
-            or the clip mean, per your capture settings), in {unit}. Positive and negative are
-            the two directions along each axis.
-          </dd>
-          <dt>{ax.primaryTag} — primary axis</dt>
-          <dd>
-            {info.hLabel.toLowerCase()}. For a {session.view} view this is the clinically
-            interesting direction, so it leads every chart and table.
-          </dd>
-          <dt>{ax.secondaryTag} — secondary axis</dt>
-          <dd>
-            {info.vLabel.toLowerCase()}. Mostly reflects the movement itself (e.g. squat depth)
-            rather than stability, so it is drawn recessively.
-          </dd>
+          {isAngle ? (
+            <>
+              <dt>{def.valueLabel}</dt>
+              <dd>
+                The angle computed from the tracked landmarks on every frame, in degrees.
+              </dd>
+              <dt>Range of motion</dt>
+              <dd>Max minus min angle — the total excursion achieved during the clip.</dd>
+            </>
+          ) : (
+            <>
+              <dt>{def.valueLabel}</dt>
+              <dd>
+                How far the landmark has moved from its position on the first tracked frame, in{' '}
+                {unit}. Positive and negative are the two directions along the axis.
+              </dd>
+              <dt>Range</dt>
+              <dd>Max minus min — the total envelope the landmark wandered through.</dd>
+            </>
+          )}
           <dt>Mean</dt>
-          <dd>
-            Average deviation over the clip. Its sign shows which side of the reference the
-            landmark spent most of its time on.
-          </dd>
+          <dd>Average value over the clip.</dd>
           <dt>Min / Max</dt>
-          <dd>The farthest excursion reached in each direction along the axis.</dd>
-          <dt>Range</dt>
-          <dd>Max minus min — the total envelope the landmark wandered through.</dd>
+          <dd>The smallest and largest values reached.</dd>
           <dt>Std dev</dt>
-          <dd>
-            Spread around the mean position. Lower = steadier; it ignores where the landmark
-            sat, only how much it wobbled.
-          </dd>
+          <dd>Spread around the mean — lower means steadier.</dd>
           <dt>RMS</dt>
-          <dd>
-            Root-mean-square deviation from the reference — the best single "how much did it
-            move overall" number, and the default metric on the Progress tab.
-          </dd>
-          <dt>Peak |dev|</dt>
-          <dd>
-            The single largest excursion (ignoring direction), with the moment it happened
-            shown as peak t. Useful for spotting the worst instant of a repetition.
-          </dd>
+          <dd>Root-mean-square value — a single overall-magnitude number.</dd>
+          <dt>Peak |v|</dt>
+          <dd>The single largest absolute value, with the moment it happened as peak t.</dd>
         </dl>
       </details>
 
@@ -248,7 +263,4 @@ function signed(v: number): string {
 function ordinal(n: number): string {
   if (n % 100 >= 11 && n % 100 <= 13) return 'th';
   return ['th', 'st', 'nd', 'rd'][Math.min(n % 10, 4)] ?? 'th';
-}
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }

@@ -235,6 +235,8 @@
 }
 
 /* ------------------------------------------------------------------- stage */
+/* Fixed 16:9 viewport: every video is letterboxed into it (zoom in for
+   detail), so portrait clips no longer take over the page. */
 .kt-stage {
   position: relative;
   background: #14110f;
@@ -243,14 +245,85 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 240px;
+}
+.kt-stage:focus-visible {
+  outline: 2px solid var(--kt-accent);
+  outline-offset: 2px;
 }
 .kt-canvas {
   display: block;
-  max-width: 100%;
+  width: 100%;
   height: auto;
   cursor: crosshair;
   touch-action: none;
+}
+
+/* zoom / pan toolbar above the stage */
+.kt-zoombar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+.kt-zoombar .kt-icon-btn {
+  border: 1px solid var(--kt-border);
+  background: var(--kt-surface);
+  color: var(--kt-ink-soft);
+  font-weight: 700;
+  min-width: 1.8rem;
+}
+.kt-zoombar .kt-icon-btn:hover {
+  background: var(--kt-plane);
+  color: var(--kt-ink);
+}
+.kt-zoom-val {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--kt-ink-soft);
+  min-width: 3rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* measurement point chips */
+.kt-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+.kt-point-chip {
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.24rem 0.6rem;
+  border-radius: 9999px;
+  border: 1px solid var(--kt-border);
+  background: var(--kt-surface);
+  color: var(--kt-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.kt-point-chip.set {
+  color: var(--kt-ink-soft);
+}
+.kt-point-chip.on {
+  border-color: var(--kt-accent);
+  background: var(--kt-accent-soft);
+  color: var(--kt-accent);
+}
+.kt-point-chip:focus-visible {
+  outline: 2px solid var(--kt-accent);
+  outline-offset: 2px;
+}
+.kt-point-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .kt-drop {

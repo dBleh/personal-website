@@ -1,8 +1,8 @@
 'use client';
 import React from 'react';
 
-import KneeTracker from '../components/tracker/KneeTracker';
+import MotionTracker from '../components/tracker/MotionTracker';
 
 export default function Home() {
-  return <KneeTracker />;
+  return <MotionTracker />;
 }

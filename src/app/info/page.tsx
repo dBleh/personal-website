@@ -11,7 +11,8 @@ export default function Guide() {
   const navItems = [
     { id: 'overview-section', label: 'Overview' },
     { id: 'steps-section', label: 'How to use' },
-    { id: 'views-section', label: 'Camera views' },
+    { id: 'measures-section', label: 'Measurements' },
+    { id: 'refine-section', label: 'Refining tracks' },
     { id: 'faq-section', label: 'Notes & FAQ' },
   ];
 
@@ -56,11 +57,11 @@ export default function Guide() {
             paddingBottom: '0.5rem',
           }}
         >
-          How to use the Knee Tracker
+          How to use the ROM &amp; Motion Tracker
         </h1>
         <p style={{ color: '#4b5563', lineHeight: 1.7, marginBottom: '2rem' }}>
-          A guide to measuring knee stability from a video. Everything runs in your browser —
-          your videos are never uploaded.{' '}
+          A guide to measuring joint range of motion and landmark movement from a video.
+          Everything runs in your browser — your videos are never uploaded.{' '}
           <Link href="/" style={{ color: '#2563eb', fontWeight: 600 }}>
             Open the tracker →
           </Link>
@@ -70,11 +71,11 @@ export default function Guide() {
           <h2 className="section-heading">Overview</h2>
           <div className="info-card">
             <p style={{ color: '#374151', lineHeight: 1.7, margin: 0 }}>
-              You mark an anatomical landmark (for example the patella apex or a tibial point) on one
-              frame of a pre-recorded clip. The app follows that point across every frame using
-              Lucas–Kanade optical flow, then graphs how far it drifts from its starting position over
-              time. Track several clips — left vs. right knee, or the same knee across appointments —
-              and overlay them on a single comparison graph with summary statistics.
+              Pick a measurement (knee flexion, shoulder ROM, pelvic tilt, a single drifting
+              landmark, …), place its landmarks on one frame of a clip, and the app follows every
+              point across the whole video with Lucas–Kanade optical flow. The result is a value
+              series — a joint angle or a displacement per frame — with a chart, summary
+              statistics (ROM, min/max, RMS), and CSV exports for your own analysis.
             </p>
           </div>
         </section>
@@ -88,32 +89,32 @@ export default function Guide() {
                 d: 'Drag a clip onto the drop zone or click to choose a file. It stays on your device. The tracking engine loads once in the background.',
               },
               {
-                t: 'Choose the camera view',
-                d: 'Pick medial/lateral (side-on, measures anterior–posterior movement) or anterior/posterior (front/back, measures medial–lateral). This sets the axis labels only.',
+                t: 'Choose what to measure',
+                d: 'Pick a measurement in the panel on the right. It lists the landmarks to place (e.g. hip–knee–ankle for knee flexion) and how to set the camera up.',
               },
               {
                 t: 'Scrub to a good start frame',
-                d: 'Use the slider or the frame-step buttons to land on a frame where the landmark sits on clear, textured detail.',
+                d: 'Use the slider, the frame-step buttons, or the ←/→ keys to land on a frame where every landmark is clearly visible.',
               },
               {
-                t: 'Mark the landmark',
-                d: 'With “Mark landmark” selected, click the exact point on the video. A crosshair shows where it will track from.',
+                t: 'Place the points',
+                d: 'Click the video to place each landmark in turn. Scroll to zoom and drag the image to pan for pixel-level precision; drag any placed point to fine-tune it.',
               },
               {
                 t: '(Optional) Calibrate to millimetres',
-                d: 'Switch to “Calibrate”, click two points a known distance apart (e.g. a 100 mm marker in shot), type that distance, and Apply. Skip this to report in pixels.',
+                d: 'For single-point measures you can click the two ends of a reference object of known length (a ruler, two tape dots a measured distance apart), so displacements report in mm instead of px. Placement matters: the reference must be at the same distance from the camera as the joint and facing the camera flat-on — never running from the camera toward the body (see the FAQ). Angles are always in degrees — no calibration needed.',
               },
               {
                 t: 'Track',
-                d: 'Press “Track from this frame”. Watch it run live. Pause any time; while paused you can click the video to re-anchor a drifting point. Finish & keep saves the data; Abort discards it.',
+                d: 'Press “Track from this frame” and watch it run live, with the angle or displacement drawn on the video. Pause any time to rewind and fix a drifting point.',
               },
               {
-                t: 'Read the graph & export',
-                d: 'A deviation-vs-time graph with a per-axis stats table appears. Download it as PNG, or export the raw data as CSV (compatible with the desktop app).',
+                t: 'Review, refine, save',
+                d: 'When tracking ends you land in review: scrub the whole clip, drag any point that drifted, and re-track forward from the corrected frame. Save when it looks right.',
               },
               {
-                t: 'Compare sessions',
-                d: 'Track more clips, switch on Compare mode, tick two or more sessions, and they overlay on one time-zeroed graph with a stats table.',
+                t: 'Analyse & export',
+                d: 'Charts, ROM/stats tables, session comparison overlays, per-session raw CSVs, and a one-row-per-session summary CSV. Sessions persist in your browser between visits.',
               },
             ].map((s, i) => (
               <div className="step-row" key={s.t}>
@@ -127,20 +128,52 @@ export default function Guide() {
           </div>
         </section>
 
-        <section id="views-section" style={{ marginBottom: '2.5rem' }}>
-          <h2 className="section-heading">Camera views</h2>
+        <section id="measures-section" style={{ marginBottom: '2.5rem' }}>
+          <h2 className="section-heading">Measurements</h2>
           <div className="info-card">
             <ul className="description-list" style={{ margin: 0 }}>
               <li>
-                <b>Medial / Lateral</b> (camera to the side): horizontal axis is anterior–posterior
-                (A/P) — the primary clinical signal. Landmark: a tibial point / fibular head.
+                <b>Joint angles (3 points)</b>: knee, hip, ankle, shoulder, elbow, and wrist
+                flexion/extension. Three landmarks define two limb segments; the included angle at
+                the middle point is charted per frame, and its range over the clip is the ROM.
               </li>
               <li>
-                <b>Anterior / Posterior</b> (camera facing front/back): horizontal axis is
-                medial–lateral (M/L). Landmark: the patella apex / popliteal crease.
+                <b>Pelvic tilt (2 points)</b>: mark the ASIS and PSIS from a side view; the
+                angle of that line versus horizontal tracks anterior/posterior tilt.
               </li>
               <li>
-                <b>Generic point</b>: track any point with looser settings, for non-knee use.
+                <b>Lateral pelvic shift (1 point)</b>: mark the sacrum midpoint from the front or
+                back; its horizontal drift from the start position is the shift.
+              </li>
+              <li>
+                <b>Single point</b>: the classic stability mode — track any landmark and chart its
+                horizontal and vertical drift (px, or mm when calibrated).
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="refine-section" style={{ marginBottom: '2.5rem' }}>
+          <h2 className="section-heading">Refining a track</h2>
+          <div className="info-card">
+            <ul className="description-list" style={{ margin: 0 }}>
+              <li>
+                <b>Zoom &amp; pan</b>: scroll on the video to zoom (up to 8×), drag to pan, and use
+                the toolbar to reset. Works while placing points, while paused, and in review.
+              </li>
+              <li>
+                <b>Rewind while tracking</b>: pause, scrub backwards through the already-tracked
+                frames, drag a point back onto the landmark, and resume — tracking re-runs from
+                the frame you fixed.
+              </li>
+              <li>
+                <b>Review pass</b>: after tracking, step through the clip frame by frame (←/→
+                keys, shift for ×10). Any point can be dragged to correct it; “Re-track from here”
+                re-runs the tracker forward from that frame.
+              </li>
+              <li>
+                <b>Tracking profiles</b>: Strict pauses for your input as soon as a point looks
+                lost; Forgiving auto-recovers and never interrupts; Balanced sits in between.
               </li>
             </ul>
           </div>
@@ -151,24 +184,41 @@ export default function Guide() {
           <div className="info-card">
             <ul className="description-list" style={{ margin: 0 }}>
               <li>
-                <b>Tracking keeps losing the point?</b> Start on a frame with visible texture, or pick
-                the “Forgiving” profile. You can always pause and re-anchor.
+                <b>Where do I put the ruler for mm calibration?</b> At the same distance from the
+                camera as the joint you are tracking, facing the camera flat-on. Best options, in
+                order: two skin markers a measured distance apart on the limb itself; a ruler
+                taped to a wall or stand right beside the joint; or a ruler on the floor running{' '}
+                <i>across</i> the frame (left–right as the camera sees it) directly below the
+                subject. A ruler pointing from the camera toward the body will not work — it is
+                foreshortened, so its pixel spacing does not represent the scale at the joint.
+                Longer references and zooming in before clicking both improve accuracy.
+              </li>
+              <li>
+                <b>Why not just enter the camera distance instead?</b> Distance alone cannot give
+                a px-to-mm scale — that also depends on the lens field of view, zoom, crop, and
+                stabilisation, none of which are knowable from the video file. Clicking a known
+                length measured in the actual footage captures all of that in one number.
+              </li>
+              <li>
+                <b>Tracking keeps losing a point?</b> Start on a frame with visible texture at
+                each landmark (skin markers help a lot), or pick the Forgiving profile. You can
+                always pause, rewind, and fix it.
               </li>
               <li>
                 <b>Timeline looks wrong?</b> The frame rate is auto-detected; override the fps in
-                Capture settings if needed.
+                the Measurement panel if needed.
               </li>
               <li>
-                <b>Comparison magnitudes look off?</b> You may be mixing pixel and mm sessions — the
-                graph flags this. Calibrate every clip to mm for comparable numbers.
+                <b>2-D angles are projections.</b> Film square-on to the plane of movement —
+                out-of-plane rotation makes an on-screen angle differ from the true joint angle.
               </li>
               <li>
-                <b>Is my video uploaded?</b> No. All processing happens locally in your browser via
-                WebAssembly; nothing is sent to a server.
+                <b>Is my video uploaded?</b> No. All processing happens locally in your browser
+                via WebAssembly; nothing is sent to a server.
               </li>
               <li>
-                <b>Clinical note:</b> this is a measurement and visualisation aid, not a diagnostic
-                device. Interpret results alongside proper clinical assessment.
+                <b>Old CSVs still work.</b> Files exported by the previous knee tracker (or the
+                desktop app) import as single-point sessions.
               </li>
             </ul>
           </div>

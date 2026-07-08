@@ -2,8 +2,9 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import { CMP_COLORS, PALETTE } from '../../lib/tracker/constants';
-import { sessionAxisStats } from '../../lib/tracker/analysis';
+import { sessionStats } from '../../lib/tracker/analysis';
 import { downloadSvgAsPng } from '../../lib/tracker/download';
+import { getMeasure } from '../../lib/tracker/measures';
 import { nearestIndex, niceTicks } from '../../lib/tracker/scale';
 import type { Session } from '../../lib/tracker/types';
 
@@ -12,7 +13,7 @@ const H = 340;
 const M = { top: 14, right: 16, bottom: 40, left: 56 };
 
 /**
- * Overlay of the primary-axis deviation of several sessions. The SVG is plot
+ * Overlay of the primary value series of several sessions. The SVG is plot
  * only; identity, values, and stats live in the HTML legend, crosshair
  * tooltip, and metrics table below.
  */
@@ -33,9 +34,9 @@ export default function ComparisonChart({ sessions }: { sessions: Session[] }) {
     let yMax = 0;
     for (const s of sessions) {
       if (s.t.length) tMax = Math.max(tMax, s.t[s.t.length - 1]);
-      for (const p of s.dev) {
-        if (p[0] < yMin) yMin = p[0];
-        if (p[0] > yMax) yMax = p[0];
+      for (const v of s.values) {
+        if (v < yMin) yMin = v;
+        if (v > yMax) yMax = v;
       }
     }
     return { tMax: tMax || 1, yMin, yMax };
@@ -48,8 +49,8 @@ export default function ComparisonChart({ sessions }: { sessions: Session[] }) {
   const sy = (v: number) => M.top + (1 - (v - y0) / (y1 - y0 || 1)) * plotH;
 
   const line = (s: Session) =>
-    s.dev
-      .map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(s.t[i]).toFixed(1)},${sy(p[0]).toFixed(1)}`)
+    s.values
+      .map((v, i) => `${i === 0 ? 'M' : 'L'}${sx(s.t[i]).toFixed(1)},${sy(v).toFixed(1)}`)
       .join(' ');
 
   const onMove = useCallback(
@@ -77,7 +78,7 @@ export default function ComparisonChart({ sessions }: { sessions: Session[] }) {
           const dt = Math.abs(s.t[idx] - hoverT);
           const tol = Math.max(0.25, tMax / 40);
           if (dt > tol) return null;
-          return { s, i, idx, v: s.dev[idx][0] };
+          return { s, i, idx, v: s.values[idx] };
         });
 
   const tipLeftPct = hoverT != null ? (sx(hoverT) / W) * 100 : 0;
@@ -95,8 +96,8 @@ export default function ComparisonChart({ sessions }: { sessions: Session[] }) {
       </div>
       {mixed && (
         <div className="kt-warnbar">
-          Sessions mix px and mm — curve magnitudes are not directly comparable. Calibrate
-          clips (or import calibrated CSVs) to compare in millimetres.
+          Sessions mix units ({Array.from(units).join(', ')}) — curve magnitudes are not
+          directly comparable. Compare sessions of the same measure/unit for meaningful overlays.
         </div>
       )}
 
@@ -202,7 +203,7 @@ export default function ComparisonChart({ sessions }: { sessions: Session[] }) {
             fill={PALETTE.inkSoft}
             transform={`rotate(-90 14 ${M.top + plotH / 2})`}
           >
-            {`Primary-axis deviation (${unitLabel})`}
+            {`Value (${unitLabel})`}
           </text>
         </svg>
 
@@ -234,8 +235,8 @@ export default function ComparisonChart({ sessions }: { sessions: Session[] }) {
 
       <div className="ktc-footer">
         <span className="kt-hint">
-          Each curve is time-zeroed to its own start; showing the primary clinical axis (A/P
-          sagittal, M/L frontal).
+          Each curve is time-zeroed to its own start; showing each session&apos;s primary value
+          series.
         </span>
         <button
           className="kt-btn kt-btn-ghost kt-btn-sm"
@@ -250,7 +251,7 @@ export default function ComparisonChart({ sessions }: { sessions: Session[] }) {
           <thead>
             <tr>
               <th>Session</th>
-              <th>View</th>
+              <th>Measure</th>
               <th>Unit</th>
               <th className="num">Frames</th>
               <th className="num">Duration (s)</th>
@@ -263,7 +264,7 @@ export default function ComparisonChart({ sessions }: { sessions: Session[] }) {
           </thead>
           <tbody>
             {sessions.map((s, i) => {
-              const ax = sessionAxisStats(s);
+              const st = sessionStats(s);
               return (
                 <tr key={s.id}>
                   <td>
@@ -273,18 +274,18 @@ export default function ComparisonChart({ sessions }: { sessions: Session[] }) {
                     />
                     {s.name}
                   </td>
-                  <td>{s.view}</td>
+                  <td>{getMeasure(s.measure).label}</td>
                   <td>{s.unit}</td>
-                  <td className="num">{ax.primary.n}</td>
-                  <td className="num">{ax.duration.toFixed(2)}</td>
+                  <td className="num">{st.primary.n}</td>
+                  <td className="num">{st.duration.toFixed(2)}</td>
                   <td className="num">
-                    {ax.primary.mean >= 0 ? '+' : ''}
-                    {ax.primary.mean.toFixed(2)}
+                    {st.primary.mean >= 0 ? '+' : ''}
+                    {st.primary.mean.toFixed(2)}
                   </td>
-                  <td className="num">{ax.primary.range.toFixed(2)}</td>
-                  <td className="num">{ax.primary.std.toFixed(2)}</td>
-                  <td className="num">{ax.primary.rms.toFixed(2)}</td>
-                  <td className="num">{ax.primary.peak.toFixed(2)}</td>
+                  <td className="num">{st.primary.range.toFixed(2)}</td>
+                  <td className="num">{st.primary.std.toFixed(2)}</td>
+                  <td className="num">{st.primary.rms.toFixed(2)}</td>
+                  <td className="num">{st.primary.peak.toFixed(2)}</td>
                 </tr>
               );
             })}

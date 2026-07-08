@@ -1,9 +1,10 @@
 'use client';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
-import { PALETTE, SEC_TAG, VIEW_INFO } from '../../lib/tracker/constants';
+import { PALETTE } from '../../lib/tracker/constants';
 import { seriesStats } from '../../lib/tracker/analysis';
 import { downloadSvgAsPng } from '../../lib/tracker/download';
+import { getMeasure } from '../../lib/tracker/measures';
 import { nearestIndex, niceTicks } from '../../lib/tracker/scale';
 import type { Session } from '../../lib/tracker/types';
 
@@ -12,28 +13,27 @@ const H = 340;
 const M = { top: 14, right: 16, bottom: 40, left: 56 };
 
 /**
- * Single-session deviation chart: SVG carries only the plot; the legend and
- * tooltip are real HTML. A crosshair snaps to the nearest sample and the
- * tooltip reads out both axes, so no value is gated behind the pixels of a
- * 2px line.
+ * Single-session value chart (joint angle or deviation over time): SVG carries
+ * only the plot; the legend and tooltip are real HTML. A crosshair snaps to
+ * the nearest sample and the tooltip reads out every series, so no value is
+ * gated behind the pixels of a 2px line.
  */
-export default function DeviationChart({ session }: { session: Session }) {
+export default function SessionChart({ session }: { session: Session }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hoverI, setHoverI] = useState<number | null>(null);
 
-  const info = VIEW_INFO[session.view] ?? VIEW_INFO.anterior;
-  const secTag = SEC_TAG[info.plane] ?? 'Y';
+  const def = getMeasure(session.measure);
   const unit = session.unit;
   const t = session.t;
-  const dx = useMemo(() => session.dev.map((p) => p[0]), [session.dev]);
-  const dy = useMemo(() => session.dev.map((p) => p[1]), [session.dev]);
+  const dx = session.values;
+  const dy = session.values2 ?? null;
   const pstat = useMemo(() => seriesStats(dx, t), [dx, t]);
 
   const plotW = W - M.left - M.right;
   const plotH = H - M.top - M.bottom;
   const tMin = t.length ? t[0] : 0;
   const tMax = t.length ? t[t.length - 1] : 1;
-  const yVals = dx.concat(dy).concat([0]);
+  const yVals = dy ? dx.concat(dy).concat([0]) : dx.slice();
   const yPad = (Math.max(...yVals) - Math.min(...yVals)) * 0.08 || 1;
   const y0 = Math.min(...yVals) - yPad;
   const y1 = Math.max(...yVals) + yPad;
@@ -45,17 +45,12 @@ export default function DeviationChart({ session }: { session: Session }) {
       .map((v, i) => `${i === 0 ? 'M' : 'L'}${sx(t[i]).toFixed(1)},${sy(v).toFixed(1)}`)
       .join(' ');
 
-  const areaPath = dx.length
-    ? `${path(dx)} L${sx(t[t.length - 1]).toFixed(1)},${sy(0).toFixed(1)} L${sx(t[0]).toFixed(1)},${sy(0).toFixed(1)} Z`
-    : '';
-
   const onMove = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       const svg = svgRef.current;
       if (!svg || !t.length) return;
       const rect = svg.getBoundingClientRect();
-      const frac = (e.clientX - rect.left) / rect.width;
-      const vx = frac * W;
+      const vx = ((e.clientX - rect.left) / rect.width) * W;
       if (vx < M.left - 12 || vx > M.left + plotW + 12) {
         setHoverI(null);
         return;
@@ -93,12 +88,14 @@ export default function DeviationChart({ session }: { session: Session }) {
       <div className="ktc-legend" role="list">
         <span role="listitem">
           <i className="ktc-key" style={{ background: PALETTE.primary }} />
-          {info.hLabel} ({info.primary}) — primary
+          {def.valueLabel}
         </span>
-        <span role="listitem">
-          <i className="ktc-key" style={{ background: PALETTE.secondary }} />
-          {info.vLabel} ({secTag}) — secondary
-        </span>
+        {dy && (
+          <span role="listitem">
+            <i className="ktc-key" style={{ background: PALETTE.secondary }} />
+            {def.value2Label ?? 'Secondary'}
+          </span>
+        )}
       </div>
 
       <div className="ktc-plot">
@@ -106,7 +103,7 @@ export default function DeviationChart({ session }: { session: Session }) {
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={`Deviation over time for ${session.name}. Use the data table below for exact values.`}
+          aria-label={`${def.valueLabel} over time for ${session.name}. Use the data table for exact values.`}
           tabIndex={0}
           onPointerMove={onMove}
           onPointerLeave={() => setHoverI(null)}
@@ -140,25 +137,28 @@ export default function DeviationChart({ session }: { session: Session }) {
               {v.toFixed(1)}
             </text>
           ))}
-          <line
-            x1={M.left}
-            x2={M.left + plotW}
-            y1={sy(0)}
-            y2={sy(0)}
-            stroke={PALETTE.baseline}
-            strokeWidth={1}
-          />
+          {y0 <= 0 && y1 >= 0 && (
+            <line
+              x1={M.left}
+              x2={M.left + plotW}
+              y1={sy(0)}
+              y2={sy(0)}
+              stroke={PALETTE.baseline}
+              strokeWidth={1}
+            />
+          )}
 
-          {areaPath && <path d={areaPath} fill={PALETTE.primary} opacity={0.1} />}
-          <path
-            d={path(dy)}
-            fill="none"
-            stroke={PALETTE.secondary}
-            strokeWidth={1.6}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            opacity={0.9}
-          />
+          {dy && (
+            <path
+              d={path(dy)}
+              fill="none"
+              stroke={PALETTE.secondary}
+              strokeWidth={1.6}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              opacity={0.9}
+            />
+          )}
           <path
             d={path(dx)}
             fill="none"
@@ -191,14 +191,16 @@ export default function DeviationChart({ session }: { session: Session }) {
                 stroke={PALETTE.baseline}
                 strokeWidth={1}
               />
-              <circle
-                cx={sx(t[hover])}
-                cy={sy(dy[hover])}
-                r={4.5}
-                fill={PALETTE.secondary}
-                stroke={PALETTE.surface}
-                strokeWidth={2}
-              />
+              {dy && (
+                <circle
+                  cx={sx(t[hover])}
+                  cy={sy(dy[hover])}
+                  r={4.5}
+                  fill={PALETTE.secondary}
+                  stroke={PALETTE.surface}
+                  strokeWidth={2}
+                />
+              )}
               <circle
                 cx={sx(t[hover])}
                 cy={sy(dx[hover])}
@@ -227,7 +229,7 @@ export default function DeviationChart({ session }: { session: Session }) {
             fill={PALETTE.inkSoft}
             transform={`rotate(-90 14 ${M.top + plotH / 2})`}
           >
-            {`Deviation (${unit})`}
+            {`${def.valueLabel} (${unit})`}
           </text>
         </svg>
 
@@ -237,7 +239,7 @@ export default function DeviationChart({ session }: { session: Session }) {
             style={{ left: `${tipLeftPct}%` }}
           >
             <div className="ktc-tip-time">
-              {t[hover].toFixed(2)} s · frame {hover}
+              {t[hover].toFixed(2)} s · sample {hover}
             </div>
             <div className="ktc-tip-row">
               <i className="ktc-key" style={{ background: PALETTE.primary }} />
@@ -245,16 +247,18 @@ export default function DeviationChart({ session }: { session: Session }) {
                 {dx[hover] >= 0 ? '+' : ''}
                 {dx[hover].toFixed(2)} {unit}
               </b>
-              <span>{info.primary}</span>
+              <span>{def.valueLabel}</span>
             </div>
-            <div className="ktc-tip-row">
-              <i className="ktc-key" style={{ background: PALETTE.secondary }} />
-              <b>
-                {dy[hover] >= 0 ? '+' : ''}
-                {dy[hover].toFixed(2)} {unit}
-              </b>
-              <span>{secTag}</span>
-            </div>
+            {dy && (
+              <div className="ktc-tip-row">
+                <i className="ktc-key" style={{ background: PALETTE.secondary }} />
+                <b>
+                  {dy[hover] >= 0 ? '+' : ''}
+                  {dy[hover].toFixed(2)} {unit}
+                </b>
+                <span>{def.value2Label ?? 'Secondary'}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -267,8 +271,7 @@ export default function DeviationChart({ session }: { session: Session }) {
         <button
           className="kt-btn kt-btn-ghost kt-btn-sm"
           onClick={() =>
-            svgRef.current &&
-            downloadSvgAsPng(svgRef.current, `${session.name}_${session.view}_chart.png`)
+            svgRef.current && downloadSvgAsPng(svgRef.current, `${session.name}_chart.png`)
           }
         >
           PNG
