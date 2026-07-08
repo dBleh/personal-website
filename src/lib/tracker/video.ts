@@ -4,6 +4,17 @@
 
 import { DEFAULT_FPS } from './constants';
 
+/**
+ * Runs after each decoded frame is drawn and its raw pixels captured — e.g.
+ * face blurring. It may repaint the canvas (what the user sees) but the
+ * returned ImageData (what tracking sees) stays raw.
+ */
+export type FramePostProcess = (
+  img: ImageData,
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+) => void;
+
 export interface VideoSource {
   el: HTMLVideoElement;
   canvas: HTMLCanvasElement;
@@ -14,6 +25,7 @@ export interface VideoSource {
   frameCount: number;
   duration: number;
   objectUrl: string;
+  postProcess?: FramePostProcess | null;
 }
 
 /** Wait for the video to have real metadata (dimensions + duration). */
@@ -183,7 +195,9 @@ export async function readFrame(
   const t = Math.min(src.duration, frame / src.fps);
   await seekTime(src.el, t);
   src.ctx.drawImage(src.el, 0, 0, src.width, src.height);
-  return src.ctx.getImageData(0, 0, src.width, src.height);
+  const img = src.ctx.getImageData(0, 0, src.width, src.height);
+  if (src.postProcess) src.postProcess(img, src.ctx, src.canvas);
+  return img;
 }
 
 /** Draw the current (already-sought) frame into a target 2D context. */

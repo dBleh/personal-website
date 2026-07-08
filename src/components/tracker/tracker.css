@@ -284,6 +284,21 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+.kt-blur-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--kt-ink-soft);
+  cursor: pointer;
+  user-select: none;
+}
+.kt-blur-toggle input {
+  accent-color: var(--kt-accent);
+  cursor: pointer;
+}
 
 /* measurement point chips */
 .kt-points {
@@ -314,6 +329,13 @@
   border-color: var(--kt-accent);
   background: var(--kt-accent-soft);
   color: var(--kt-accent);
+}
+/* Point lost at the shown frame — needs re-anchoring (wins over .on so the
+   selected-and-lost chip still reads as a warning). */
+.kt-point-chip.bad {
+  border-color: var(--kt-warn-border);
+  background: var(--kt-warn-soft);
+  color: var(--kt-warn-ink);
 }
 .kt-point-chip:focus-visible {
   outline: 2px solid var(--kt-accent);
@@ -492,6 +514,24 @@ textarea.kt-input {
   accent-color: var(--kt-accent);
 }
 
+/* playback bar (setup / review / paused tracking) */
+.kt-playbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.25rem 0 0.5rem;
+}
+.kt-seg-speed button {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.kt-playbar-hint {
+  margin-left: auto;
+  text-align: right;
+}
+
 .kt-progress {
   height: 8px;
   background: var(--kt-border);
@@ -657,6 +697,9 @@ textarea.kt-input {
 }
 .kt-hint.danger {
   color: var(--kt-danger);
+}
+.kt-hint.ok {
+  color: var(--kt-ok);
 }
 
 .kt-overlay {

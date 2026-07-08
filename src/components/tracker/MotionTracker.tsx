@@ -64,6 +64,7 @@ interface XY {
 }
 
 const STEPS = ['Load video', 'Place points', 'Track', 'Review & save'];
+const PLAY_SPEEDS = [0.25, 0.5, 1, 2, 4];
 
 export default function MotionTracker() {
   const [tab, setTab] = useState<Tab>('track');
@@ -104,11 +105,20 @@ export default function MotionTracker() {
   const [readout, setReadout] = useState('');
   const [paused, setPaused] = useState(false);
   const [lost, setLost] = useState(false);
+  const [justFixed, setJustFixed] = useState(false); // lost points all re-anchored, ready to resume
   const [editFrame, setEditFrame] = useState(0); // scrub position while paused / reviewing
   const [editTick, setEditTick] = useState(0); // bumped when records are edited in place
   const ctlRef = useRef<Ctl>({ paused: false, finish: false, abort: false, restartFrom: null });
   const recordsRef = useRef<FrameRecord[]>([]);
   const trailRef = useRef<XY[]>([]);
+
+  // Playback preview (setup / review / paused tracking): frames advance on a
+  // wall clock so the chosen speed stays true even when seeks lag behind.
+  const [playing, setPlaying] = useState(false);
+  const [playSpeed, setPlaySpeed] = useState(1);
+  const playingRef = useRef(false);
+  const playSpeedRef = useRef(1);
+  const playBasis = useRef({ frame: 0, t: 0 });
 
   // Sessions
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -132,6 +142,8 @@ export default function MotionTracker() {
   phaseRef.current = phase;
   const editFrameRef = useRef(0);
   editFrameRef.current = editFrame;
+  const curFrameRef = useRef(0);
+  curFrameRef.current = curFrame;
 
   // ------------------------------------------------------------- persistence
   const hydrated = useRef(false);
@@ -183,6 +195,22 @@ export default function MotionTracker() {
       clampView();
       setZoomUi(clamped);
     },
+    [clampView, fitScale],
+  );
+
+  /** Center the view on a video-space point, optionally raising zoom. */
+  const centerOnPoint = useCallback(
+    (vp: XY, z?: number) => {
+      const v = viewRef.current;
+      v.z = Math.max(1, Math.min(MAX_ZOOM, z ?? v.z));
+      const s = fitScale() * v.z;
+      v.tx = VIEW_W / 2 - vp.x * s;
+      v.ty = VIEW_H / 2 - vp.y * s;
+      clampView();
+      setZoomUi(v.z);
+      draw(currentOverlayRef.current());
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [clampView, fitScale],
   );
 
@@ -424,9 +452,11 @@ export default function MotionTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase === 'empty']);
 
-  // Keep a live ref to currentOverlay for native listeners.
+  // Keep live refs for native listeners and the playback loop.
   const currentOverlayRef = useRef(currentOverlay);
   currentOverlayRef.current = currentOverlay;
+  const showFrameRef = useRef(showFrame);
+  showFrameRef.current = showFrame;
 
   // ------------------------------------------------------------------ loading
   /** Point the current video source at the blurrer (or detach it). */
@@ -441,6 +471,7 @@ export default function MotionTracker() {
   }, []);
 
   const handleFile = useCallback(async (file: File) => {
+    stopPlayback();
     setError(null);
     setBusy('Reading video…');
     try {
@@ -517,6 +548,7 @@ export default function MotionTracker() {
   } | null>(null);
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (playingRef.current) stopPlayback();
     if (!editable()) return;
     const b = eventToBacking(e);
     if (!b) return;
@@ -614,23 +646,59 @@ export default function MotionTracker() {
     const rec = currentRecord();
     if (!rec || !rec.pts[idx]) return;
     rec.pts[idx] = { x: vp.x, y: vp.y, ok: true };
-    setLost(false);
+    const nextBad = rec.pts.findIndex((p) => p.ok === false);
+    if (nextBad >= 0) {
+      // More points still need fixing — select the next one and bring it into view.
+      setActivePt(nextBad);
+      if (lost) centerOnPoint(rec.pts[nextBad]);
+    } else {
+      if (lost) setJustFixed(true);
+      setLost(false);
+    }
     setEditTick((t) => t + 1); // records live in a ref; poke React to repaint
   };
 
   const onStageKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    const step = (e.shiftKey ? 10 : 1) * (e.key === 'ArrowRight' ? 1 : -1);
-    if (phase === 'setup') {
+    const scrubbing =
+      phase === 'setup' || phase === 'review' || (phase === 'tracking' && paused);
+    if (!scrubbing) return;
+    if (e.key === ' ') {
       e.preventDefault();
-      onScrubSetup(Math.max(0, Math.min(frameCount - 1, curFrame + step)));
-    } else if (phase === 'review' || (phase === 'tracking' && paused)) {
-      e.preventDefault();
-      onScrubEdit(clampEditFrame(editFrame + step));
+      if (playing) stopPlayback();
+      else startPlayback();
+      return;
     }
+    if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      const target = e.key === 'Home' ? 0 : frameCount - 1; // scrub handlers clamp
+      if (phase === 'setup') onScrubSetup(target);
+      else onScrubEdit(target);
+      return;
+    }
+    if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      applyZoom(viewRef.current.z * 1.5);
+      return;
+    }
+    if (e.key === '-') {
+      e.preventDefault();
+      applyZoom(viewRef.current.z / 1.5);
+      return;
+    }
+    if (e.key === '0') {
+      e.preventDefault();
+      applyZoom(1);
+      return;
+    }
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const step = (e.shiftKey ? 10 : 1) * (e.key === 'ArrowRight' ? 1 : -1);
+    if (phase === 'setup') onScrubSetup(Math.max(0, Math.min(frameCount - 1, curFrame + step)));
+    else onScrubEdit(clampEditFrame(editFrame + step));
   };
 
   const onScrubSetup = (frame: number) => {
+    stopPlayback();
     setCurFrame(frame);
     void showFrame(frame);
   };
@@ -642,10 +710,118 @@ export default function MotionTracker() {
   };
 
   const onScrubEdit = (frame: number) => {
+    stopPlayback();
     const f = clampEditFrame(frame);
     setEditFrame(f);
     editFrameRef.current = f;
     void showFrame(f);
+  };
+
+  // ---------------------------------------------------------------- playback
+  /** Frames playback may cover right now: whole clip in setup, tracked range otherwise. */
+  const playRange = () => {
+    const src = srcRef.current;
+    if (!src) return null;
+    if (phaseRef.current === 'setup') return { start: 0, end: src.frameCount - 1 };
+    const recs = recordsRef.current;
+    if (!recs.length) return null;
+    return { start: recs[0].frame, end: recs[recs.length - 1].frame };
+  };
+
+  const stopPlayback = () => {
+    playingRef.current = false;
+    setPlaying(false);
+  };
+
+  const startPlayback = () => {
+    const range = playRange();
+    if (!range || playingRef.current) return;
+    let from = phaseRef.current === 'setup' ? curFrameRef.current : editFrameRef.current;
+    if (from >= range.end) from = range.start; // at the end — replay from the top
+    playingRef.current = true;
+    setPlaying(true);
+    playBasis.current = { frame: from, t: performance.now() };
+    void playLoop();
+  };
+
+  /** Advance frames on the wall clock; slow seeks drop frames instead of dragging the tempo. */
+  const playLoop = async () => {
+    const src = srcRef.current;
+    if (!src) return;
+    let shown = -1;
+    while (playingRef.current && srcRef.current === src) {
+      const range = playRange();
+      if (!range) break;
+      const b = playBasis.current;
+      const raw = b.frame + ((performance.now() - b.t) / 1000) * playSpeedRef.current * src.fps;
+      const target = Math.max(range.start, Math.min(range.end, Math.floor(raw)));
+      if (target !== shown) {
+        shown = target;
+        if (phaseRef.current === 'setup') {
+          setCurFrame(target);
+        } else {
+          setEditFrame(target);
+          editFrameRef.current = target;
+        }
+        await showFrameRef.current(target);
+      }
+      if (target >= range.end) break; // reached the end — leave the last frame up
+      await sleep(Math.max(8, 500 / (src.fps * playSpeedRef.current)));
+    }
+    playingRef.current = false;
+    setPlaying(false);
+  };
+
+  const changePlaySpeed = (s: number) => {
+    setPlaySpeed(s);
+    playSpeedRef.current = s;
+    if (playingRef.current) {
+      // Re-base so the new speed applies from the frame on screen.
+      playBasis.current = {
+        frame: phaseRef.current === 'setup' ? curFrameRef.current : editFrameRef.current,
+        t: performance.now(),
+      };
+    }
+  };
+
+  // Playback is a preview aid; anything that changes what the stage is for stops it.
+  useEffect(() => {
+    stopPlayback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, paused, tab]);
+
+  /** Rewind to the most recent frame (at or before the shown one) where every point tracked cleanly. */
+  const jumpToLastGood = () => {
+    const recs = recordsRef.current;
+    if (!recs.length) return;
+    const start = recs[0].frame;
+    let i = Math.max(0, Math.min(recs.length - 1, editFrameRef.current - start));
+    while (i > 0 && !recs[i].pts.every((p) => p.ok !== false)) i--;
+    onScrubEdit(recs[i].frame);
+  };
+
+  /** Jump to the previous / next frame where any point was flagged during tracking. */
+  const jumpFlagged = (dir: 1 | -1) => {
+    const recs = recordsRef.current;
+    if (!recs.length) return;
+    const start = recs[0].frame;
+    for (
+      let i = Math.max(0, Math.min(recs.length - 1, editFrame - start)) + dir;
+      i >= 0 && i < recs.length;
+      i += dir
+    ) {
+      if (recs[i].pts.some((p) => p.ok === false)) {
+        onScrubEdit(recs[i].frame);
+        return;
+      }
+    }
+  };
+
+  /** Zoom in on the currently selected point at the shown frame. */
+  const zoomToActivePoint = () => {
+    const rec = currentRecord();
+    const p = rec?.pts[activePt];
+    if (p) centerOnPoint(p, Math.max(viewRef.current.z, 3));
   };
 
   const applyCalibration = () => {
@@ -697,6 +873,7 @@ export default function MotionTracker() {
     ctlRef.current = { paused: false, finish: false, abort: false, restartFrom: null };
     setPaused(false);
     setLost(false);
+    setJustFixed(false);
     setProgress(0);
     setPhase('tracking');
 
@@ -774,8 +951,14 @@ export default function MotionTracker() {
             ctlRef.current.paused = true;
             setPaused(true);
             setLost(true);
+            setJustFixed(false);
             setEditFrame(idx);
             editFrameRef.current = idx;
+            // Select the lost point and bring it into view so a plain click fixes it.
+            const badIdx = nextPts.findIndex((p) => !p.ok);
+            setActivePt(Math.max(0, badIdx));
+            if (badIdx >= 0)
+              centerOnPoint(nextPts[badIdx], Math.max(viewRef.current.z, 2.5));
             draw(liveOverlay('TRACKING LOST — fix the point(s), then Resume', '#ffb100'));
             continue;
           }
@@ -939,6 +1122,14 @@ export default function MotionTracker() {
   };
 
   // ------------------------------------------------------------------- render
+  const activeProfile = preset(presetName);
+  const profileHint =
+    activeProfile.recoverGrace === 0
+      ? 'Pauses the moment a point drifts so you can fix it on the spot — most accurate, most interruptions.'
+      : activeProfile.recoverGrace == null
+        ? 'Never interrupts: lost points snap back automatically and you tidy up any stragglers in review.'
+        : `Recovers lost points automatically; pauses for your help only after ${activeProfile.recoverGrace} bad frames in a row (~${(activeProfile.recoverGrace / fps).toFixed(1)} s).`;
+
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const compareList = sessions.filter((s) => compareIds.has(s.id));
 
@@ -953,6 +1144,13 @@ export default function MotionTracker() {
   const editRec = recs.length
     ? recs[Math.max(0, Math.min(recs.length - 1, editFrame - trackStart))]
     : null;
+  const anyFlagged = recs.some((r) => r.pts.some((p) => p.ok === false));
+  const lostLabels = editRec
+    ? editRec.pts
+        .map((p, i) => (p.ok === false ? measure.points[i]?.label ?? `P${i + 1}` : null))
+        .filter(Boolean)
+        .join(' + ')
+    : '';
 
   const zoomBar = phase !== 'empty' && (
     <div className="kt-zoombar">
@@ -975,22 +1173,51 @@ export default function MotionTracker() {
     </div>
   );
 
+  const playbackBar = (
+    <div className="kt-playbar">
+      <button
+        className="kt-btn kt-btn-ghost kt-btn-sm"
+        onClick={() => (playing ? stopPlayback() : startPlayback())}
+        aria-label={playing ? 'Pause playback' : 'Play'}
+      >
+        {playing ? '⏸ Pause' : '▶ Play'}
+      </button>
+      <div className="kt-seg kt-seg-speed" role="group" aria-label="Playback speed">
+        {PLAY_SPEEDS.map((s) => (
+          <button
+            key={s}
+            className={playSpeed === s ? 'on' : ''}
+            aria-pressed={playSpeed === s}
+            onClick={() => changePlaySpeed(s)}
+            title={`Play at ${s}× speed`}
+          >
+            {s}×
+          </button>
+        ))}
+      </div>
+      <span className="kt-hint kt-playbar-hint">
+        space play/pause · ←/→ step (Shift ×10) · Home/End jump · +/− zoom
+      </span>
+    </div>
+  );
+
   const pointChips = (interactive: boolean) => (
     <div className="kt-points" role="tablist" aria-label="Measurement points">
       {measure.points.map((pd, i) => {
         const set = phase === 'setup' ? points[i] !== null : true;
+        const bad = phase !== 'setup' && editRec?.pts[i]?.ok === false;
         return (
           <button
             key={pd.id}
             role="tab"
             aria-selected={activePt === i}
-            className={`kt-point-chip ${activePt === i ? 'on' : ''} ${set ? 'set' : ''}`}
+            className={`kt-point-chip ${activePt === i ? 'on' : ''} ${set ? 'set' : ''} ${bad ? 'bad' : ''}`}
             onClick={() => interactive && setActivePt(i)}
-            title={pd.label}
+            title={bad ? `${pd.label} — tracking lost here, click to select and fix it` : pd.label}
           >
             <span className="kt-point-dot" style={{ background: POINT_COLORS[i % POINT_COLORS.length] }} />
             {pd.label}
-            {set ? ' ✓' : ''}
+            {bad ? ' ⚠' : set ? ' ✓' : ''}
           </button>
         );
       })}
@@ -1179,7 +1406,7 @@ export default function MotionTracker() {
                   className="kt-stage"
                   tabIndex={0}
                   onKeyDown={onStageKeyDown}
-                  aria-label="Video stage. Use left and right arrow keys to step frames."
+                  aria-label="Video stage. Space plays or pauses; left and right arrow keys step frames; Home and End jump to the start and end."
                 >
                   <canvas
                     ref={canvasRef}
@@ -1286,6 +1513,7 @@ export default function MotionTracker() {
                         <button className="kt-btn kt-btn-ghost kt-btn-sm" onClick={() => onScrubSetup(Math.min(frameCount - 1, curFrame + 1))}>frame ▶</button>
                       </div>
                     </div>
+                    {playbackBar}
 
                     <div className="kt-row" style={{ marginTop: '0.75rem' }}>
                       <button
@@ -1329,23 +1557,44 @@ export default function MotionTracker() {
                         />
                         <div className="kt-row between" style={{ margin: '0 0 0.25rem' }}>
                           <div className="kt-hint">
-                            Rewind: frame {editFrame} / {trackEnd} — resuming re-tracks from here
+                            Rewind: frame {editFrame} / {trackEnd} · {(editFrame / fps).toFixed(2)}s —
+                            resuming re-tracks from here
                           </div>
                           <div className="kt-row" style={{ margin: 0 }}>
                             <button className="kt-btn kt-btn-ghost kt-btn-sm" onClick={() => onScrubEdit(editFrame - 1)}>◀ frame</button>
                             <button className="kt-btn kt-btn-ghost kt-btn-sm" onClick={() => onScrubEdit(editFrame + 1)}>frame ▶</button>
                           </div>
                         </div>
+                        {playbackBar}
+                        <div className="kt-row" style={{ margin: '0 0 0.25rem' }}>
+                          <button
+                            className="kt-btn kt-btn-ghost kt-btn-sm"
+                            onClick={zoomToActivePoint}
+                            title="Zoom in on the selected point for precise placement"
+                          >
+                            🔍 Zoom to {measure.points[activePt]?.label ?? 'point'}
+                          </button>
+                          {anyFlagged && (
+                            <button
+                              className="kt-btn kt-btn-ghost kt-btn-sm"
+                              onClick={jumpToLastGood}
+                              title="Rewind to the most recent frame where every point tracked cleanly"
+                            >
+                              ⏮ Last good frame
+                            </button>
+                          )}
+                        </div>
                         {measure.points.length > 1 && pointChips(true)}
                       </>
                     )}
                     <div className="kt-row" style={{ marginTop: '0.5rem' }}>
                       <button
-                        className="kt-btn kt-btn-ghost"
+                        className={`kt-btn ${justFixed ? 'kt-btn-ok' : 'kt-btn-ghost'}`}
                         onClick={() => {
                           const next = !ctlRef.current.paused;
                           ctlRef.current.paused = next;
                           setPaused(next);
+                          setJustFixed(false);
                           if (next) {
                             const last = recordsRef.current[recordsRef.current.length - 1]?.frame ?? 0;
                             setEditFrame(last);
@@ -1355,7 +1604,7 @@ export default function MotionTracker() {
                           }
                         }}
                       >
-                        {paused ? '▶ Resume' : '⏸ Pause / rewind'}
+                        {paused ? (justFixed ? '▶ Resume tracking' : '▶ Resume') : '⏸ Pause / rewind'}
                       </button>
                       <button className="kt-btn kt-btn-ok" onClick={() => (ctlRef.current.finish = true)}>
                         ✓ Finish → review
@@ -1365,10 +1614,12 @@ export default function MotionTracker() {
                       </button>
                     </div>
                     {(paused || lost) && (
-                      <div className={`kt-hint ${lost ? 'danger' : ''}`} style={{ marginTop: 6 }}>
+                      <div className={`kt-hint ${lost ? 'danger' : justFixed ? 'ok' : ''}`} style={{ marginTop: 6 }}>
                         {lost
-                          ? 'Tracking lost. Drag (or click with a point selected) the true position on the video, then Resume.'
-                          : 'Paused. Scrub back through tracked frames, drag points to correct them, then Resume — tracking re-runs from the shown frame.'}
+                          ? `Tracking lost${lostLabels ? `: ${lostLabels}` : ''}. The lost point is selected and zoomed in — just click its true position on the video (fixing one selects the next), then Resume.`
+                          : justFixed
+                            ? '✓ Point re-anchored. Press Resume to re-track forward from this frame.'
+                            : 'Paused. Scrub back through tracked frames, drag points to correct them, then Resume — tracking re-runs from the shown frame.'}
                       </div>
                     )}
                   </>
@@ -1387,19 +1638,47 @@ export default function MotionTracker() {
                     />
                     <div className="kt-row between" style={{ margin: '0 0 0.25rem' }}>
                       <div className="kt-hint">
-                        Frame {editFrame} / {trackEnd} ·{' '}
+                        Frame {editFrame} / {trackEnd} · {(editFrame / fps).toFixed(2)}s ·{' '}
                         {editRec ? valueReadout(measure, recs, editFrame - trackStart, pxPerMm) : ''}
                       </div>
                       <div className="kt-row" style={{ margin: 0 }}>
+                        {anyFlagged && (
+                          <>
+                            <button
+                              className="kt-btn kt-btn-ghost kt-btn-sm"
+                              onClick={() => jumpFlagged(-1)}
+                              title="Jump to the previous frame where tracking struggled"
+                            >
+                              ◀ ⚠
+                            </button>
+                            <button
+                              className="kt-btn kt-btn-ghost kt-btn-sm"
+                              onClick={() => jumpFlagged(1)}
+                              title="Jump to the next frame where tracking struggled"
+                            >
+                              ⚠ ▶
+                            </button>
+                          </>
+                        )}
                         <button className="kt-btn kt-btn-ghost kt-btn-sm" onClick={() => onScrubEdit(editFrame - 1)}>◀ frame</button>
                         <button className="kt-btn kt-btn-ghost kt-btn-sm" onClick={() => onScrubEdit(editFrame + 1)}>frame ▶</button>
+                        <button
+                          className="kt-btn kt-btn-ghost kt-btn-sm"
+                          onClick={zoomToActivePoint}
+                          title="Zoom in on the selected point for precise placement"
+                        >
+                          🔍 Zoom to point
+                        </button>
                       </div>
                     </div>
+                    {playbackBar}
                     {measure.points.length > 1 && pointChips(true)}
                     <div className="kt-hint">
                       Check the whole clip. Drag a point (or click with it selected) to correct a
                       frame; use “Re-track from here” to re-run tracking forward from the corrected
                       frame.
+                      {anyFlagged &&
+                        ' Frames where tracking struggled are marked ⚠ — use the ⚠ arrows to jump straight to them.'}
                     </div>
                     <div className="kt-row" style={{ marginTop: '0.5rem' }}>
                       <button className="kt-btn kt-btn-ok" onClick={saveSession}>
@@ -1454,9 +1733,7 @@ export default function MotionTracker() {
                     <option key={n} value={n}>{n}</option>
                   ))}
                 </select>
-                <div className="kt-hint" style={{ marginTop: 4 }}>
-                  Strict pauses for your input sooner; Forgiving never interrupts.
-                </div>
+                <div className="kt-hint" style={{ marginTop: 4 }}>{profileHint}</div>
               </div>
               {phase !== 'empty' && (
                 <div className="kt-field" style={{ marginBottom: 0 }}>
