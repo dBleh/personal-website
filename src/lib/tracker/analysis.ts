@@ -2,8 +2,8 @@
 // read/write in the exact desktop format (so exports interoperate with the
 // Python `--compare` and re-import).
 
-import { DEFAULT_FPS, VIEW_INFO, VIEWS, ViewKey } from './constants';
-import type { Session, TrackRecord, Unit } from './types';
+import { DEFAULT_FPS, SEC_TAG, VIEW_INFO, VIEWS, ViewKey } from './constants';
+import type { Session, StudyInfo, TrackRecord, Unit } from './types';
 
 export interface SeriesStats {
   n: number;
@@ -117,6 +117,24 @@ export function primaryLabel(view: ViewKey): string {
   return (VIEW_INFO[view] ?? VIEW_INFO.anterior).primary;
 }
 
+/** Stats for both axes of a session, with their anatomical tags. */
+export function sessionAxisStats(s: Session): {
+  primary: SeriesStats;
+  secondary: SeriesStats;
+  primaryTag: string;
+  secondaryTag: string;
+  duration: number;
+} {
+  const info = VIEW_INFO[s.view] ?? VIEW_INFO.anterior;
+  return {
+    primary: seriesStats(s.dev.map((p) => p[0]), s.t),
+    secondary: seriesStats(s.dev.map((p) => p[1]), s.t),
+    primaryTag: info.primary,
+    secondaryTag: SEC_TAG[info.plane] ?? 'Y',
+    duration: s.t.length > 1 ? s.t[s.t.length - 1] - s.t[0] : 0,
+  };
+}
+
 // --- CSV ---------------------------------------------------------------------
 
 /**
@@ -132,6 +150,7 @@ export function sessionFromTracking(
   devPx: [number, number][],
   fps: number,
   calibNote = '',
+  date?: string,
 ): Session {
   const scale = pxPerMm && unit === 'mm' ? 1.0 / pxPerMm : 1.0;
   const f0 = records[0].frame;
@@ -148,7 +167,12 @@ export function sessionFromTracking(
     dev,
     source: 'tracked',
     calibNote,
+    date: date || todayIso(),
   };
+}
+
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function cryptoId(): string {
@@ -176,6 +200,7 @@ export function sessionToCsv(
   const hy = `deviation_y_${s.unit}`;
   const hap = `ap_deviation_${s.unit}`;
   const meta = [`# knee_tracker`, `view=${s.view}`, `unit=${s.unit}`];
+  if (s.date) meta.push(`date=${s.date}`);
   if (s.calibNote) meta.push(`calib=${s.calibNote}`);
   const lines: string[] = [];
   lines.push(meta.join(','));
@@ -185,7 +210,9 @@ export function sessionToCsv(
     const [dx, dy] = s.dev[i];
     const rec = records ? records[i] : null;
     const frame = rec ? rec.frame : i;
-    const t = fps ? frame / fps : s.t[i];
+    // Only trust `fps` when we have real frame indices; a session restored
+    // from storage/CSV keeps its own timeline.
+    const t = rec && fps ? frame / fps : s.t[i];
     const x = rec ? rec.x : 0;
     const y = rec ? rec.y : 0;
     const ap = sagittal ? dx.toFixed(4) : '';
@@ -204,8 +231,16 @@ export function sessionToCsv(
   return lines.join('\n') + '\n';
 }
 
-/** Read back a knee_tracker deviation CSV. Port of read_deviation_csv. */
-export function sessionFromCsv(text: string, filename: string): Session {
+/**
+ * Read back a knee_tracker deviation CSV. Port of read_deviation_csv.
+ * `fallbackDate` (e.g. the file's modified date) is used when the CSV predates
+ * the `date=` meta field, so multi-day imports still land on a timeline.
+ */
+export function sessionFromCsv(
+  text: string,
+  filename: string,
+  fallbackDate?: string,
+): Session {
   const rows = text
     .split(/\r?\n/)
     .filter((l) => l.trim().length > 0)
@@ -215,10 +250,12 @@ export function sessionFromCsv(text: string, filename: string): Session {
   let idx = 0;
   let viewMeta: string | null = null;
   let calibNote = '';
+  let dateMeta = '';
   if (rows[0][0].startsWith('#')) {
     for (const tok of rows[0]) {
       if (tok.startsWith('view=')) viewMeta = tok.slice(5);
       else if (tok.startsWith('calib=')) calibNote = tok.slice(6);
+      else if (tok.startsWith('date=')) dateMeta = tok.slice(5);
     }
     idx = 1;
   }
@@ -257,6 +294,9 @@ export function sessionFromCsv(text: string, filename: string): Session {
     view = apSeen ? 'medial' : 'anterior';
   }
   const name = filename.replace(/\.[^.]+$/, '');
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateMeta)
+    ? dateMeta
+    : fallbackDate || todayIso();
   return {
     id: cryptoId(),
     name,
@@ -266,7 +306,100 @@ export function sessionFromCsv(text: string, filename: string): Session {
     dev,
     source: 'csv',
     calibNote,
+    date,
   };
+}
+
+/**
+ * One-row-per-session summary CSV for case studies: study metadata plus the
+ * full metric set for both axes, ready to drop into a spreadsheet and
+ * aggregate across visits.
+ */
+export function sessionsToSummaryCsv(
+  sessions: Session[],
+  study: StudyInfo,
+): string {
+  const esc = (v: string) =>
+    /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  const header = [
+    'client',
+    'assessment_date',
+    'assessor',
+    'movement',
+    'side',
+    'session',
+    'session_date',
+    'view',
+    'plane',
+    'landmark',
+    'unit',
+    'calibration',
+    'frames',
+    'duration_s',
+    'primary_axis',
+    'primary_mean',
+    'primary_min',
+    'primary_max',
+    'primary_range',
+    'primary_std',
+    'primary_rms',
+    'primary_peak',
+    'primary_peak_time_s',
+    'secondary_axis',
+    'secondary_mean',
+    'secondary_min',
+    'secondary_max',
+    'secondary_range',
+    'secondary_std',
+    'secondary_rms',
+    'secondary_peak',
+    'secondary_peak_time_s',
+    'notes',
+  ];
+  const lines = [header.join(',')];
+  for (const s of sessions) {
+    const info = VIEW_INFO[s.view] ?? VIEW_INFO.anterior;
+    const ax = sessionAxisStats(s);
+    const num = (v: number) => v.toFixed(3);
+    lines.push(
+      [
+        esc(study.client),
+        esc(study.date),
+        esc(study.assessor),
+        esc(study.movement),
+        study.side,
+        esc(s.name),
+        s.date,
+        s.view,
+        info.plane,
+        esc(info.landmark),
+        s.unit,
+        esc(s.calibNote || 'none (pixel units)'),
+        String(ax.primary.n),
+        ax.duration.toFixed(3),
+        ax.primaryTag,
+        num(ax.primary.mean),
+        num(ax.primary.min),
+        num(ax.primary.max),
+        num(ax.primary.range),
+        num(ax.primary.std),
+        num(ax.primary.rms),
+        num(ax.primary.peak),
+        ax.primary.peakT.toFixed(3),
+        ax.secondaryTag,
+        num(ax.secondary.mean),
+        num(ax.secondary.min),
+        num(ax.secondary.max),
+        num(ax.secondary.range),
+        num(ax.secondary.std),
+        num(ax.secondary.rms),
+        num(ax.secondary.peak),
+        ax.secondary.peakT.toFixed(3),
+        esc(study.notes),
+      ].join(','),
+    );
+  }
+  return lines.join('\n') + '\n';
 }
 
 export { VIEWS };

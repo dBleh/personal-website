@@ -30,6 +30,20 @@ export interface Session {
   dev: [number, number][]; // Nx2 deviation in `unit`
   source: 'tracked' | 'csv';
   calibNote: string;
+  // Assessment date (ISO yyyy-mm-dd). Written into the CSV header on export
+  // and recovered on import, so multi-day histories survive the round trip.
+  date: string;
+}
+
+// Case-study metadata entered by the practitioner. Travels into the summary
+// CSV and the printable report so exports stand on their own as documents.
+export interface StudyInfo {
+  client: string;
+  date: string; // ISO yyyy-mm-dd
+  assessor: string;
+  movement: string; // task performed on camera, e.g. "bodyweight squat"
+  side: 'left' | 'right' | 'n/a';
+  notes: string;
 }
 
 export interface TrackingProfile {

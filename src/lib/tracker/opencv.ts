@@ -4,16 +4,18 @@
 
 import { LK } from './constants';
 
-// OpenCV.js is loaded at runtime from a script URL. It is self-hosted under
-// /public/opencv/opencv.js so the app is fully offline-capable and no request
-// ever leaves the user's device (matching the app's privacy promise). The
-// pinned build embeds its WASM as a data: URI, so there is no separate .wasm
-// fetch. Override the location via NEXT_PUBLIC_OPENCV_URL at build time.
-const OPENCV_URL =
+// OpenCV.js is loaded at runtime from a script URL. Prefer the local copy
+// under `/public/opencv/opencv.js` for offline use, but fall back to the
+// official CDN if the local file fails to load. Override the location via
+// `NEXT_PUBLIC_OPENCV_URL` at build time.
+const OPENCV_LOCAL =
   (typeof process !== 'undefined' &&
     process.env &&
     process.env.NEXT_PUBLIC_OPENCV_URL) ||
   '/opencv/opencv.js';
+const OPENCV_CDN = 'https://docs.opencv.org/4.x/opencv.js';
+// Toggle this to force the CDN build for debugging local failures.
+const FORCE_CDN = false;
 
 // Fail loudly instead of hanging the "Loading tracking engine…" spinner forever.
 const LOAD_TIMEOUT_MS = 60_000;
@@ -34,6 +36,8 @@ let cvPromise: Promise<CV> | null = null;
 export function loadOpenCV(): Promise<CV> {
   if (cvPromise) return cvPromise;
   cvPromise = new Promise<CV>((resolve, reject) => {
+    // eslint-disable-next-line no-console
+    console.log('[opencv] loadOpenCV() start, OPENCV_LOCAL=', OPENCV_LOCAL, 'OPENCV_CDN=', OPENCV_CDN);
     if (typeof window === 'undefined') {
       reject(new Error('OpenCV can only load in the browser'));
       return;
@@ -44,12 +48,28 @@ export function loadOpenCV(): Promise<CV> {
     let settled = false;
     let timer: ReturnType<typeof setTimeout>;
     const done = (mod: CV) => {
+      // eslint-disable-next-line no-console
+      console.log('[opencv] module initialized');
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      // Legacy Emscripten builds (including the docs.opencv.org 4.x one)
+      // attach a fake `Module.then` that invokes its callback with the Module
+      // itself. Resolving a Promise with such a self-referential thenable
+      // recurses forever (emscripten#5820) and freezes the page — strip it
+      // before resolving.
+      if (mod && typeof mod.then === 'function') {
+        try {
+          delete mod.then;
+        } catch {
+          /* non-configurable then: fall through and hope it's a real promise */
+        }
+      }
       resolve(mod);
     };
     const fail = (err: Error) => {
+      // eslint-disable-next-line no-console
+      console.error('[opencv] load failed', err && err.message ? err.message : err);
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -68,18 +88,47 @@ export function loadOpenCV(): Promise<CV> {
 
     // Turn whatever `window.cv` currently is into a ready module.
     const initFromGlobal = () => {
+      // eslint-disable-next-line no-console
+      console.log('[opencv] initFromGlobal: window.cv=', typeof w.cv);
       const cv = w.cv;
       try {
         if (typeof cv === 'function') {
-          // MODULARIZE factory: calling it returns a promise for the module.
-          Promise.resolve(cv())
-            .then((m: CV) => {
-              w.cv = m; // cache the initialized module for future callers
-              done(m);
-            })
-            .catch(fail);
+          // MODULARIZE factory: calling it returns either a real Promise or a
+          // legacy self-thenable Module. Never use Promise.resolve() here —
+          // assimilating a legacy thenable recurses forever. Call .then
+          // directly instead; `done` strips the fake `then` before resolving.
+          try {
+            const out = cv();
+            if (out && typeof out.then === 'function') {
+              out.then((m: CV) => {
+                w.cv = m || out; // cache the initialized module
+                done(w.cv);
+              });
+            } else {
+              w.cv = out;
+              done(out);
+            }
+          } catch (e) {
+            // If calling cv() throws synchronously, surface the error.
+            fail(e instanceof Error ? e : new Error(String(e)));
+          }
         } else if (cv && typeof cv.then === 'function') {
-          cv.then(done).catch(fail);
+          // Emscripten's non-standard Module.then registers a callback to be
+          // invoked when the runtime is ready. Call it directly so we don't
+          // accidentally resolve the module before initialization (which
+          // happens if we do `Promise.resolve(cv).then(...)`).
+          try {
+            // Some implementations call the callback immediately if ready,
+            // or later when initialized.
+            cv.then((m: CV) => {
+              // If the thenable yields a module, use it; otherwise, keep
+              // `cv` itself which should be the Module object.
+              done(m || cv);
+            });
+          } catch (e) {
+            // Fallback: treat `cv` as a plain value and resolve it.
+            Promise.resolve(cv).then(done).catch(fail);
+          }
         } else if (cv && cv.Mat) {
           done(cv);
         } else if (cv) {
@@ -102,6 +151,8 @@ export function loadOpenCV(): Promise<CV> {
       'opencv-js',
     ) as HTMLScriptElement | null;
     if (existing) {
+      // eslint-disable-next-line no-console
+      console.log('[opencv] found existing script element (id=opencv-js)');
       existing.addEventListener('load', initFromGlobal);
       existing.addEventListener('error', () =>
         fail(new Error('Failed to load OpenCV.js.')),
@@ -110,20 +161,44 @@ export function loadOpenCV(): Promise<CV> {
       return;
     }
 
-    const script = document.createElement('script');
-    script.id = 'opencv-js';
-    script.src = OPENCV_URL;
-    script.async = true;
-    script.onload = initFromGlobal;
-    script.onerror = () =>
-      fail(
-        new Error(
-          'Could not load the tracking engine (OpenCV.js) from ' +
-            OPENCV_URL +
-            '.',
-        ),
-      );
-    document.body.appendChild(script);
+    // Append a new script tag to load OpenCV.js
+    const tryAppend = (url: string) => {
+      const script = document.createElement('script');
+      script.id = 'opencv-js';
+      script.src = url;
+      script.async = true;
+      // eslint-disable-next-line no-console
+      console.log('[opencv] appending script', url);
+      script.onload = () => {
+        // eslint-disable-next-line no-console
+        console.log('[opencv] script.onload fired for', url);
+        initFromGlobal();
+      };
+      script.onerror = (ev) => {
+        // eslint-disable-next-line no-console
+        console.error('[opencv] script.onerror for', url, ev);
+        // If this was the local URL, try the CDN as a fallback before failing.
+        if (url === OPENCV_LOCAL && OPENCV_CDN) {
+          // Remove the failed script element and attempt CDN.
+          try { document.body.removeChild(script); } catch {}
+          // eslint-disable-next-line no-console
+          console.warn('[opencv] local script failed, trying CDN', OPENCV_CDN);
+          tryAppend(OPENCV_CDN);
+          return;
+        }
+        fail(new Error('Could not load the tracking engine (OpenCV.js) from ' + url + '.'));
+      };
+      document.body.appendChild(script);
+    };
+
+    // Start with local by default, unless debugging forces the CDN first.
+    if (FORCE_CDN && OPENCV_CDN) {
+      // eslint-disable-next-line no-console
+      console.warn('[opencv] FORCE_CDN enabled — loading CDN first');
+      tryAppend(OPENCV_CDN);
+    } else {
+      tryAppend(OPENCV_LOCAL);
+    }
   });
   return cvPromise;
 }
