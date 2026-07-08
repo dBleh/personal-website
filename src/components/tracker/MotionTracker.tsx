@@ -10,6 +10,7 @@ import {
   sessionToCsv,
 } from '../../lib/tracker/analysis';
 import { downloadText } from '../../lib/tracker/download';
+import { FaceBlurrer, loadFaceBlurrer } from '../../lib/tracker/faceblur';
 import {
   DEFAULT_MEASURE,
   MeasureDef,
@@ -115,6 +116,11 @@ export default function MotionTracker() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+
+  // Face blur (privacy): pixelate detected faces on the preview canvas.
+  const [blurFaces, setBlurFaces] = useState(true);
+  const blurFacesRef = useRef(true);
+  const blurRef = useRef<FaceBlurrer | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -288,15 +294,25 @@ export default function MotionTracker() {
         ctx.arc(b.x, b.y, u(22), a1, a2, diff < 0);
         ctx.stroke();
         valueText = `${measureValue(measure, pts as XY[]).toFixed(1)}°`;
-      } else if (measure.kind === 'incline2' && pts[0] && pts[1]) {
-        // dashed horizontal reference through the first point
+      } else if (
+        (measure.kind === 'incline2' || measure.kind === 'vincline2') &&
+        pts[0] &&
+        pts[1]
+      ) {
+        // dashed reference through the first point: horizontal for incline2,
+        // vertical for vincline2
         const p0 = pts[0];
         ctx.strokeStyle = 'rgba(255,226,122,0.8)';
         ctx.lineWidth = u(1.2);
         ctx.setLineDash([u(5), u(4)]);
         ctx.beginPath();
-        ctx.moveTo(p0.x - u(50), p0.y);
-        ctx.lineTo(p0.x + u(50), p0.y);
+        if (measure.kind === 'incline2') {
+          ctx.moveTo(p0.x - u(50), p0.y);
+          ctx.lineTo(p0.x + u(50), p0.y);
+        } else {
+          ctx.moveTo(p0.x, p0.y - u(50));
+          ctx.lineTo(p0.x, p0.y + u(50));
+        }
         ctx.stroke();
         ctx.setLineDash([]);
         valueText = `${measureValue(measure, pts as XY[]).toFixed(1)}°`;
@@ -413,6 +429,17 @@ export default function MotionTracker() {
   currentOverlayRef.current = currentOverlay;
 
   // ------------------------------------------------------------------ loading
+  /** Point the current video source at the blurrer (or detach it). */
+  const syncBlur = useCallback(() => {
+    const src = srcRef.current;
+    if (!src) return;
+    const b = blurRef.current;
+    src.postProcess =
+      blurFacesRef.current && b
+        ? (img, ctx, canvas) => b.process(img, ctx, canvas)
+        : null;
+  }, []);
+
   const handleFile = useCallback(async (file: File) => {
     setError(null);
     setBusy('Reading video…');
@@ -435,6 +462,15 @@ export default function MotionTracker() {
       setPhase('setup');
       setBusy('Loading tracking engine…');
       await loadOpenCV(); // warm the WASM up front so Track is instant
+      try {
+        blurRef.current = await loadFaceBlurrer();
+        blurRef.current.reset(); // drop face regions held from a previous clip
+      } catch {
+        setNotice(
+          'Automatic face blurring could not load, so faces will NOT be hidden in the preview. Reload the page to retry.',
+        );
+      }
+      syncBlur();
       setBusy(null);
       requestAnimationFrame(() => {
         void showFrame(0).catch(() => {
@@ -892,6 +928,16 @@ export default function MotionTracker() {
     };
   }, []);
 
+  const toggleBlur = (on: boolean) => {
+    setBlurFaces(on);
+    blurFacesRef.current = on;
+    syncBlur();
+    // Repaint the shown frame so the change is immediate.
+    if (phase === 'setup') void showFrame(curFrame);
+    else if (phase === 'review' || (phase === 'tracking' && paused))
+      void showFrame(editFrameRef.current);
+  };
+
   // ------------------------------------------------------------------- render
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const compareList = sessions.filter((s) => compareIds.has(s.id));
@@ -915,6 +961,17 @@ export default function MotionTracker() {
       <button className="kt-icon-btn" onClick={() => applyZoom(zoomUi * 1.5)} aria-label="Zoom in" title="Zoom in">+</button>
       <button className="kt-icon-btn" onClick={() => applyZoom(1)} title="Fit video">Fit</button>
       <span className="kt-hint" style={{ marginLeft: 6 }}>scroll to zoom · drag to pan</span>
+      <label
+        className="kt-blur-toggle"
+        title="Automatically pixelate any face detected in the video"
+      >
+        <input
+          type="checkbox"
+          checked={blurFaces}
+          onChange={(e) => toggleBlur(e.target.checked)}
+        />
+        Blur faces
+      </label>
     </div>
   );
 
@@ -1113,7 +1170,7 @@ export default function MotionTracker() {
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
                 <div className="kt-drop-title">Drop a video here, or click to choose a file</div>
-                <div className="kt-hint">MP4 / MOV / WebM · processed locally, nothing is uploaded</div>
+                <div className="kt-hint">MP4 / MOV / WebM · processed locally, nothing is uploaded · faces are auto-blurred</div>
               </div>
             ) : (
               <div className="kt-card">

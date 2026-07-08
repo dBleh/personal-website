@@ -14,10 +14,11 @@ export interface PointDef {
   label: string; // what to click on the video
 }
 
-// angle3   – included angle at the middle (vertex) point, 0–180°
-// incline2 – signed angle of the line p1→p2 vs. horizontal, −90..+90°
-// point    – single-point displacement from the first frame (x and y)
-export type MeasureKind = 'angle3' | 'incline2' | 'point';
+// angle3    – included angle at the middle (vertex) point, 0–180°
+// incline2  – signed angle of the line p1→p2 vs. horizontal, −90..+90°
+// vincline2 – signed angle of the line p1→p2 vs. vertical, −90..+90°
+// point     – single-point displacement from the first frame (x and y)
+export type MeasureKind = 'angle3' | 'incline2' | 'vincline2' | 'point';
 
 export interface MeasureDef {
   key: string;
@@ -57,6 +58,19 @@ export function inclination(a: Pt, b: Pt): number {
   return ang;
 }
 
+/**
+ * Signed inclination of the line a→b versus vertical, in degrees, folded to
+ * −90..+90. Near-vertical body segments (spine, hanging shank, upright
+ * forearm) read ≈0 here instead of sitting on the ±90 fold of `inclination`,
+ * so rotation and side-bend excursions chart continuously through neutral.
+ */
+export function vinclination(a: Pt, b: Pt): number {
+  let ang = deg(Math.atan2(b.x - a.x, -(b.y - a.y)));
+  if (ang > 90) ang -= 180;
+  if (ang < -90) ang += 180;
+  return ang;
+}
+
 /** Per-frame value of a measure given that frame's tracked points. */
 export function measureValue(def: MeasureDef, pts: Pt[]): number {
   switch (def.kind) {
@@ -64,6 +78,8 @@ export function measureValue(def: MeasureDef, pts: Pt[]): number {
       return angleAt(pts[0], pts[1], pts[2]);
     case 'incline2':
       return inclination(pts[0], pts[1]);
+    case 'vincline2':
+      return vinclination(pts[0], pts[1]);
     case 'point':
       return pts[0].x; // caller re-references against frame 0 and scales
   }
@@ -82,6 +98,27 @@ const angle3 = (
   kind: 'angle3',
   points: points.map(([id, l]) => ({ id, label: l })),
   valueLabel: 'Joint angle',
+  hint,
+});
+
+// Two-point line measure: incline2 tilts vs. horizontal, vincline2 vs.
+// vertical. The dashed reference in the overlay is drawn through the first
+// point, so list the pivot/lower landmark first.
+const line2 = (
+  key: string,
+  label: string,
+  group: string,
+  kind: 'incline2' | 'vincline2',
+  points: [string, string][],
+  valueLabel: string,
+  hint: string,
+): MeasureDef => ({
+  key,
+  label,
+  group,
+  kind,
+  points: points.map(([id, l]) => ({ id, label: l })),
+  valueLabel,
   hint,
 });
 
@@ -108,6 +145,18 @@ export const MEASURES: Record<string, MeasureDef> = {
     ],
     'Film side-on. Angle between the trunk line and the femur (standing tall ≈ 180°).',
   ),
+  'hip-rot': line2(
+    'hip-rot',
+    'Hip internal / external rotation',
+    'Lower limb',
+    'vincline2',
+    [
+      ['knee', 'Knee — centre of the patella'],
+      ['ankle', 'Ankle — front of the ankle joint'],
+    ],
+    'Shank swing',
+    'Sit with the knee bent 90° over the edge of a chair and film front-on. The shank swings like a pendulum: foot out = internal rotation, foot in = external. Angle of the knee→ankle line vs. vertical.',
+  ),
   'ankle-flex': angle3(
     'ankle-flex',
     'Ankle dorsi / plantar flexion',
@@ -130,6 +179,18 @@ export const MEASURES: Record<string, MeasureDef> = {
     ],
     'Film side-on for flexion, front-on for abduction. Angle between trunk and humerus (arm down ≈ 0–10°).',
   ),
+  'shoulder-rot': line2(
+    'shoulder-rot',
+    'Shoulder internal / external rotation',
+    'Upper limb',
+    'vincline2',
+    [
+      ['elbow', 'Elbow — olecranon / point of the elbow'],
+      ['wrist', 'Wrist — radial styloid'],
+    ],
+    'Forearm swing',
+    'Lie on your back, shoulder out 90°, elbow bent 90°, forearm pointing at the ceiling. Film from beside the elbow, looking along the upper arm. Angle of the elbow→wrist line vs. vertical (toward the head = external rotation).',
+  ),
   'elbow-flex': angle3(
     'elbow-flex',
     'Elbow flexion / extension',
@@ -151,6 +212,90 @@ export const MEASURES: Record<string, MeasureDef> = {
       ['hand', 'Hand — 2nd knuckle (MCP)'],
     ],
     'Film side-on to the forearm with the thumb up. Neutral wrist ≈ 180°.',
+  ),
+  'cervical-flex': line2(
+    'cervical-flex',
+    'Cervical flexion / extension',
+    'Spine',
+    'vincline2',
+    [
+      ['c7', 'C7 — bony bump at the base of the neck'],
+      ['ear', 'Ear — ear canal / tragus'],
+    ],
+    'Neck inclination',
+    'Film side-on at shoulder height. Angle of the C7→ear line vs. vertical; nod fully forward, then look fully up — the excursion is cervical flex/ext ROM.',
+  ),
+  'cervical-side': line2(
+    'cervical-side',
+    'Cervical side bending',
+    'Spine',
+    'incline2',
+    [
+      ['l-eye', 'Left eye — outer corner'],
+      ['r-eye', 'Right eye — outer corner'],
+    ],
+    'Head tilt',
+    'Film front-on at head height. Tilt of the eye-to-eye line vs. horizontal as you bring each ear toward its shoulder.',
+  ),
+  'cervical-rot': line2(
+    'cervical-rot',
+    'Cervical rotation',
+    'Spine',
+    'incline2',
+    [
+      ['l-ear', 'Left ear — top of the ear'],
+      ['r-ear', 'Right ear — top of the ear'],
+    ],
+    'Head rotation',
+    'Sit and film from directly above the head, looking straight down. The ear-to-ear line rotates with the head as you turn fully left and right.',
+  ),
+  'thoracic-flex': line2(
+    'thoracic-flex',
+    'Thoracic flexion / extension',
+    'Spine',
+    'vincline2',
+    [
+      ['t12', 'T12/L1 — spine at the bottom of the ribcage'],
+      ['c7', 'C7 — bony bump at the base of the neck'],
+    ],
+    'Thoracic inclination',
+    'Film side-on. Angle of the T12→C7 line vs. vertical as you slump/curl the mid-back, then extend over the back of a chair.',
+  ),
+  'lumbar-flex': line2(
+    'lumbar-flex',
+    'Lumbar flexion / extension',
+    'Spine',
+    'vincline2',
+    [
+      ['sacrum', 'Sacrum — S2, midline between the PSIS dimples'],
+      ['t12', 'T12/L1 — spine at the bottom of the ribcage'],
+    ],
+    'Lumbar inclination',
+    'Film side-on. Angle of the sacrum→T12 line vs. vertical. Pair with pelvic tilt to separate true lumbar motion from hip motion.',
+  ),
+  'spine-side': line2(
+    'spine-side',
+    'Spine side bending (thoracolumbar)',
+    'Spine',
+    'vincline2',
+    [
+      ['sacrum', 'Sacrum — S2, midline between the PSIS dimples'],
+      ['c7', 'C7 — bony bump at the base of the neck'],
+    ],
+    'Trunk lean',
+    'Film from directly behind, standing. Angle of the sacrum→C7 line vs. vertical as you slide a hand down the side of each thigh.',
+  ),
+  'spine-rot': line2(
+    'spine-rot',
+    'Spinal rotation (thoracolumbar)',
+    'Spine',
+    'incline2',
+    [
+      ['l-shoulder', 'Left shoulder — acromion'],
+      ['r-shoulder', 'Right shoulder — acromion'],
+    ],
+    'Shoulder-line rotation',
+    'Sit (to fix the pelvis) and film from directly above. Rotation of the shoulder-to-shoulder line vs. horizontal as you twist fully each way.',
   ),
   'pelvic-tilt': {
     key: 'pelvic-tilt',
