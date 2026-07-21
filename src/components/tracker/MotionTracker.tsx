@@ -15,6 +15,7 @@ import {
   DEFAULT_MEASURE,
   MeasureDef,
   getMeasure,
+  isLengthMeasure,
   measureGroups,
   measureValue,
 } from '../../lib/tracker/measures';
@@ -1027,7 +1028,7 @@ export default function MotionTracker() {
       measure.key,
       recs,
       srcRef.current?.fps ?? fps,
-      measure.kind === 'point' ? pxPerMm : null,
+      isLengthMeasure(measure) ? pxPerMm : null,
       calibNote,
     );
     recordsMap.current.set(session.id, recs.slice());
@@ -1428,7 +1429,7 @@ export default function MotionTracker() {
                 {phase === 'setup' && (
                   <>
                     <div className="kt-row" style={{ marginTop: '0.75rem' }}>
-                      {measure.kind === 'point' && (
+                      {isLengthMeasure(measure) && (
                         <div className="kt-seg" role="tablist">
                           <button
                             role="tab"
@@ -1455,7 +1456,7 @@ export default function MotionTracker() {
                           {points.filter(Boolean).length}/{points.length} points placed
                         </span>
                       )}
-                      {measure.kind === 'point' && pxPerMm && (
+                      {isLengthMeasure(measure) && pxPerMm && (
                         <span className="kt-chip ok">✓ {pxPerMm.toFixed(2)} px/mm</span>
                       )}
                     </div>
@@ -1812,11 +1813,21 @@ function valueReadout(
 ): string {
   const rec = recs[i];
   if (!rec) return '';
-  if (measure.kind === 'point') {
+  if (isLengthMeasure(measure)) {
     const scale = pxPerMm ? 1 / pxPerMm : 1;
     const unit = pxPerMm ? 'mm' : 'px';
-    const dx = (rec.pts[0].x - recs[0].pts[0].x) * scale;
-    const dy = (rec.pts[0].y - recs[0].pts[0].y) * scale;
+    let dx: number;
+    let dy: number;
+    if (measure.kind === 'point') {
+      dx = (rec.pts[0].x - recs[0].pts[0].x) * scale;
+      dy = (rec.pts[0].y - recs[0].pts[0].y) * scale;
+    } else {
+      // offset2: displacement of pts[1] relative to pts[0], re-zeroed to frame 0
+      const o0x = recs[0].pts[1].x - recs[0].pts[0].x;
+      const o0y = recs[0].pts[1].y - recs[0].pts[0].y;
+      dx = (rec.pts[1].x - rec.pts[0].x - o0x) * scale;
+      dy = (rec.pts[1].y - rec.pts[0].y - o0y) * scale;
+    }
     return `dx=${dx >= 0 ? '+' : ''}${dx.toFixed(1)} dy=${dy >= 0 ? '+' : ''}${dy.toFixed(1)} ${unit}`;
   }
   return `angle=${measureValue(measure, rec.pts).toFixed(1)}°`;

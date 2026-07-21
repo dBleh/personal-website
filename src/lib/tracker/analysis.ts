@@ -128,6 +128,15 @@ export function sessionFromTracking(
     const y0 = records[0].pts[0].y;
     values = records.map((r) => (r.pts[0].x - x0) * scale);
     values2 = records.map((r) => (r.pts[0].y - y0) * scale);
+  } else if (def.kind === 'offset2') {
+    // Displacement of pts[1] (moving landmark) relative to pts[0] (reference),
+    // re-zeroed to the first frame so shared limb/camera motion cancels.
+    const scale = pxPerMm ? 1 / pxPerMm : 1;
+    unit = pxPerMm ? 'mm' : 'px';
+    const ox0 = records[0].pts[1].x - records[0].pts[0].x;
+    const oy0 = records[0].pts[1].y - records[0].pts[0].y;
+    values = records.map((r) => (r.pts[1].x - r.pts[0].x - ox0) * scale);
+    values2 = records.map((r) => (r.pts[1].y - r.pts[0].y - oy0) * scale);
   } else {
     unit = 'deg';
     values = records.map((r) => measureValue(def, r.pts));

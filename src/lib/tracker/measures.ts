@@ -18,7 +18,12 @@ export interface PointDef {
 // incline2  – signed angle of the line p1→p2 vs. horizontal, −90..+90°
 // vincline2 – signed angle of the line p1→p2 vs. vertical, −90..+90°
 // point     – single-point displacement from the first frame (x and y)
-export type MeasureKind = 'angle3' | 'incline2' | 'vincline2' | 'point';
+// offset2   – displacement of p2 relative to p1 (a moving landmark tracked
+//             against a reference landmark), re-zeroed to the first frame.
+//             Cancels whole-limb/camera motion, so it reads true joint
+//             translation (e.g. anterior–posterior tibial shift). Length-valued
+//             like `point`: px, or mm when a scale calibration is applied.
+export type MeasureKind = 'angle3' | 'incline2' | 'vincline2' | 'point' | 'offset2';
 
 export interface MeasureDef {
   key: string;
@@ -82,7 +87,18 @@ export function measureValue(def: MeasureDef, pts: Pt[]): number {
       return vinclination(pts[0], pts[1]);
     case 'point':
       return pts[0].x; // caller re-references against frame 0 and scales
+    case 'offset2':
+      return pts[1].x - pts[0].x; // caller re-references against frame 0 and scales
   }
+}
+
+/**
+ * Length-valued measures report a displacement in px (or mm when calibrated)
+ * rather than an angle in degrees. These use scale calibration, carry a
+ * secondary vertical series, and read out per-axis in the tracker UI.
+ */
+export function isLengthMeasure(def: MeasureDef): boolean {
+  return def.kind === 'point' || def.kind === 'offset2';
 }
 
 const angle3 = (
@@ -157,6 +173,19 @@ export const MEASURES: Record<string, MeasureDef> = {
     'Shank swing',
     'Sit with the knee bent 90° over the edge of a chair and film front-on. The shank swings like a pendulum: foot out = internal rotation, foot in = external. Angle of the knee→ankle line vs. vertical.',
   ),
+  'tibial-shift': {
+    key: 'tibial-shift',
+    label: 'Anterior / posterior tibial shift',
+    group: 'Lower limb',
+    kind: 'offset2',
+    points: [
+      { id: 'femur', label: 'Femur — lateral femoral condyle / epicondyle (reference)' },
+      { id: 'tibia', label: 'Tibia — tibial tuberosity (moving point)' },
+    ],
+    valueLabel: 'Anterior–posterior shift',
+    value2Label: 'Vertical drift',
+    hint: 'Film side-on with a stationary, square camera. Tracks the tibial tuberosity relative to the femoral condyle, so whole-leg motion cancels out and the horizontal reading is the anterior (+) / posterior (−) drawer of the tibia. Calibrate the scale for mm. Note: single-camera skin tracking shows the trend, not an instrumented laxity value.',
+  },
   'ankle-flex': angle3(
     'ankle-flex',
     'Ankle dorsi / plantar flexion',
